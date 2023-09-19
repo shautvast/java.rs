@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::Read;
 
 fn main() {
-    let bytecode = read_class_file("/Users/FJ19WK/RustroverProjects/classfile_reader/MetaField.class");
+    let bytecode = read_class_file("./MetaField.class");
     if let Some(class) = classfile_reader::get_class(bytecode){
         println!("{:?}", class);
     }
