@@ -163,7 +163,7 @@ fn read_field(index: &mut usize, bytecode: &Vec<u8>) -> Field {
 fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &Vec<u8>) -> Method {
     let access_flags = get_u16(bytecode, *index);
     let name_index = get_u16(bytecode, *index + 2) as usize;
-    let descriptor_index = get_u16(bytecode, *index + 4);
+    let descriptor_index = get_u16(bytecode, *index + 4) as usize;
     let attributes_count = get_u16(bytecode, *index + 6);
     *index += 8;
     let mut attributes = vec![];
