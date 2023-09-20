@@ -1,5 +1,6 @@
 pub mod types;
 
+use std::rc::Rc;
 use crate::types::{CpEntry, Class, Field, Attribute, Method};
 
 pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
@@ -11,6 +12,8 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     for _ in 0..constant_pool_count - 1 {
         constant_pool.push(read_constant_pool_entry(&mut index, &bytecode));
     }
+
+    let constant_pool = Rc::new(constant_pool);
 
     let access_flags = get_u16(&bytecode, index);
     let this_class = get_u16(&bytecode, index + 2);
@@ -35,7 +38,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     index += 2;
     let mut methods = vec![];
     for _ in 0..methods_count {
-        methods.push(read_method(&mut index, &bytecode));
+        methods.push(read_method(constant_pool.clone(), &mut index, &bytecode));
     }
 
     let attributes_count = get_u16(&bytecode, index);
@@ -61,7 +64,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
 
 fn check_magic(bytecode: &Vec<u8>) {
     if &bytecode[0..4] != [0xCA, 0xFE, 0xBA, 0xBE] {
-        panic!(); //must never happen
+        panic!("Invalid class file");
     }
 }
 
@@ -97,12 +100,12 @@ fn read_constant_pool_entry(index: &mut usize, bytecode: &Vec<u8>) -> CpEntry {
         7 => {
             let name_index = get_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::Class(name_index)
+            CpEntry::ClassRef(name_index)
         }
         8 => {
             let string_index = get_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::String(string_index)
+            CpEntry::StringRef(string_index)
         }
         9 => {
             let class_index = get_u16(bytecode, *index + 1);
@@ -127,7 +130,13 @@ fn read_constant_pool_entry(index: &mut usize, bytecode: &Vec<u8>) -> CpEntry {
             let descriptor_index = get_u16(bytecode, *index + 3);
             *index += 5;
             CpEntry::NameAndType(name_index, descriptor_index)
-        }
+        },
+        // 15 MethodHandle,
+        // 16 MethodType,
+        // 17 Dynamic,
+        // 18 InvokeDynamic,
+        // 19 Module,
+        // 20 Package,
         _ => panic!()
     }
 }
@@ -151,9 +160,9 @@ fn read_field(index: &mut usize, bytecode: &Vec<u8>) -> Field {
     }
 }
 
-fn read_method(index: &mut usize, bytecode: &Vec<u8>) -> Method {
+fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &Vec<u8>) -> Method {
     let access_flags = get_u16(bytecode, *index);
-    let name_index = get_u16(bytecode, *index + 2);
+    let name_index = get_u16(bytecode, *index + 2) as usize;
     let descriptor_index = get_u16(bytecode, *index + 4);
     let attributes_count = get_u16(bytecode, *index + 6);
     *index += 8;
@@ -162,6 +171,7 @@ fn read_method(index: &mut usize, bytecode: &Vec<u8>) -> Method {
         attributes.push(read_attribute(bytecode, index));
     }
     Method {
+        constant_pool,
         access_flags,
         name_index,
         descriptor_index,

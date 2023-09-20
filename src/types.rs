@@ -1,9 +1,12 @@
+use std::rc::Rc;
+use crate::types::CpEntry::*;
+
 #[derive(Debug)]
 //TODO create factory function
 pub struct Class {
     pub minor_version: u16,
     pub major_version: u16,
-    pub constant_pool: Vec<CpEntry>,
+    pub constant_pool: Rc<Vec<CpEntry>>,
     pub access_flags: u16,
     pub this_class: u16,
     pub super_class: u16,
@@ -11,6 +14,16 @@ pub struct Class {
     pub fields: Vec<Field>,
     pub methods: Vec<Method>,
     pub attributes: Vec<Attribute>,
+}
+
+impl<'a> Class {
+    pub fn get_version(&self) -> (u16, u16) {
+        (self.major_version, self.minor_version)
+    }
+
+    pub fn get_methods(&self) -> &Vec<Method> {
+        &self.methods
+    }
 }
 
 
@@ -21,8 +34,8 @@ pub enum CpEntry {
     Float(f32),
     Long(i64),
     Double(f64),
-    Class(u16),
-    String(u16),
+    ClassRef(u16),
+    StringRef(u16),
     Fieldref(u16, u16),
     MethodRef(u16, u16),
     InterfaceMethodref(u16, u16),
@@ -45,10 +58,20 @@ pub struct Attribute {
 }
 
 #[derive(Debug)]
-pub struct Method{
+pub struct Method {
+    pub constant_pool: Rc<Vec<CpEntry>>,
     pub access_flags: u16,
-    pub name_index: u16,
+    pub name_index: usize,
     pub descriptor_index: u16,
     pub attributes_count: u16,
     pub attributes: Vec<Attribute>,
+}
+
+impl Method {
+    pub fn name(&self) -> &str {
+        if let Utf8(s) = &self.constant_pool[self.name_index - 1] {
+            return &s;
+        }
+        panic!() // name must be utf8
+    }
 }
