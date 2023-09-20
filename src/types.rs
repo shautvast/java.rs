@@ -17,26 +17,16 @@ pub struct Class {
 #[derive(Debug)]
 pub enum CpEntry {
     Utf8(String),
-    //1
     Integer(i32),
-    //3
     Float(f32),
-    //4
     Long(i64),
-    //5
     Double(f64),
-    //6
     Class(u16),
-    //7
     String(u16),
-    //8
     Fieldref(u16, u16),
-    //9
     MethodRef(u16, u16),
-    //10
     InterfaceMethodref(u16, u16),
-    //11
-    NameAndType(u16, u16), //12
+    NameAndType(u16, u16),
 }
 
 #[derive(Debug)]
