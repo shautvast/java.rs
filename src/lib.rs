@@ -1,7 +1,7 @@
 pub mod types;
 
 use std::rc::Rc;
-use crate::types::{CpEntry, Class, Field, Attribute, Method};
+use crate::types::{Attribute, Class, Field, Method};
 
 pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     check_magic(&bytecode);
@@ -31,7 +31,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     index += 2;
     let mut fields = vec![];
     for _ in 0..fields_count {
-        fields.push(read_field(&mut index, &bytecode));
+        fields.push(read_field(constant_pool.clone(), &mut index, &bytecode));
     }
 
     let methods_count = get_u16(&bytecode, index);
@@ -62,13 +62,13 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     })
 }
 
-fn check_magic(bytecode: &Vec<u8>) {
-    if &bytecode[0..4] != [0xCA, 0xFE, 0xBA, 0xBE] {
+fn check_magic(bytecode: &[u8]) {
+    if bytecode[0..4] != [0xCA, 0xFE, 0xBA, 0xBE] {
         panic!("Invalid class file");
     }
 }
 
-fn read_constant_pool_entry(index: &mut usize, bytecode: &Vec<u8>) -> CpEntry {
+fn read_constant_pool_entry(index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = bytecode[*index];
     match tag {
         1 => {
@@ -130,7 +130,7 @@ fn read_constant_pool_entry(index: &mut usize, bytecode: &Vec<u8>) -> CpEntry {
             let descriptor_index = get_u16(bytecode, *index + 3);
             *index += 5;
             CpEntry::NameAndType(name_index, descriptor_index)
-        },
+        }
         // 15 MethodHandle,
         // 16 MethodType,
         // 17 Dynamic,
@@ -141,26 +141,7 @@ fn read_constant_pool_entry(index: &mut usize, bytecode: &Vec<u8>) -> CpEntry {
     }
 }
 
-fn read_field(index: &mut usize, bytecode: &Vec<u8>) -> Field {
-    let access_flags = get_u16(bytecode, *index);
-    let name_index = get_u16(bytecode, *index + 2);
-    let descriptor_index = get_u16(bytecode, *index + 4);
-    let attributes_count = get_u16(bytecode, *index + 6);
-    *index += 8;
-    let mut attributes = vec![];
-    for _ in 0..attributes_count {
-        attributes.push(read_attribute(bytecode, index));
-    }
-    Field {
-        access_flags,
-        name_index,
-        descriptor_index,
-        attributes_count,
-        attributes,
-    }
-}
-
-fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &Vec<u8>) -> Method {
+fn read_field(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Field {
     let access_flags = get_u16(bytecode, *index);
     let name_index = get_u16(bytecode, *index + 2) as usize;
     let descriptor_index = get_u16(bytecode, *index + 4) as usize;
@@ -170,17 +151,35 @@ fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &Ve
     for _ in 0..attributes_count {
         attributes.push(read_attribute(bytecode, index));
     }
-    Method {
+    Field::new(
         constant_pool,
         access_flags,
         name_index,
         descriptor_index,
-        attributes_count,
         attributes,
-    }
+    )
 }
 
-fn read_attribute(bytecode: &Vec<u8>, index: &mut usize) -> Attribute {
+fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Method {
+    let access_flags = get_u16(bytecode, *index);
+    let name_index = get_u16(bytecode, *index + 2) as usize;
+    let descriptor_index = get_u16(bytecode, *index + 4) as usize;
+    let attributes_count = get_u16(bytecode, *index + 6);
+    *index += 8;
+    let mut attributes = vec![];
+    for _ in 0..attributes_count {
+        attributes.push(read_attribute(bytecode, index));
+    }
+    Method::new (
+        constant_pool,
+        access_flags,
+        name_index,
+        descriptor_index,
+        attributes,
+    )
+}
+
+fn read_attribute(bytecode: &[u8], index: &mut usize) -> Attribute {
     let attribute_name_index = get_u16(bytecode, *index);
     *index += 2;
     let attribute_length = read_u32(bytecode, *index) as usize;
@@ -194,26 +193,46 @@ fn read_attribute(bytecode: &Vec<u8>, index: &mut usize) -> Attribute {
     }
 }
 
-fn get_u16(data: &Vec<u8>, pos: usize) -> u16 {
+fn get_u16(data: &[u8], pos: usize) -> u16 {
     u16::from_be_bytes(data[pos..pos + 2].try_into().expect("slice with incorrect length"))
 }
 
-fn get_i32(data: &Vec<u8>, pos: usize) -> i32 {
+fn get_i32(data: &[u8], pos: usize) -> i32 {
     i32::from_be_bytes(data[pos..pos + 4].try_into().expect("slice with incorrect length"))
 }
 
-fn read_u32(data: &Vec<u8>, pos: usize) -> u32 {
+fn read_u32(data: &[u8], pos: usize) -> u32 {
     u32::from_be_bytes(data[pos..pos + 4].try_into().expect("slice with incorrect length"))
 }
 
-fn get_f32(data: &Vec<u8>, pos: usize) -> f32 {
+fn get_f32(data: &[u8], pos: usize) -> f32 {
     f32::from_be_bytes(data[pos..pos + 4].try_into().expect("slice with incorrect length"))
 }
 
-fn get_i64(data: &Vec<u8>, pos: usize) -> i64 {
+fn get_i64(data: &[u8], pos: usize) -> i64 {
     i64::from_be_bytes(data[pos..pos + 8].try_into().expect("slice with incorrect length"))
 }
 
-fn get_f64(data: &Vec<u8>, pos: usize) -> f64 {
+fn get_f64(data: &[u8], pos: usize) -> f64 {
     f64::from_be_bytes(data[pos..pos + 8].try_into().expect("slice with incorrect length"))
 }
+
+#[derive(Debug)]
+pub enum CpEntry {
+    Utf8(String),
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    ClassRef(u16),
+    StringRef(u16),
+    Fieldref(u16, u16),
+    MethodRef(u16, u16),
+    InterfaceMethodref(u16, u16),
+    NameAndType(u16, u16),
+}
+
+
+
+
+
