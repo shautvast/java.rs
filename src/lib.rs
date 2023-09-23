@@ -45,7 +45,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     index += 2;
     let mut attributes = vec![];
     for _ in 0..attributes_count {
-        attributes.push(read_attribute(&bytecode, &mut index));
+        attributes.push(read_attribute(constant_pool.clone(), &bytecode, &mut index));
     }
 
     Some(Class {
@@ -126,8 +126,8 @@ fn read_constant_pool_entry(index: &mut usize, bytecode: &[u8]) -> CpEntry {
             CpEntry::InterfaceMethodref(class_index, name_and_type_index)
         }
         12 => {
-            let name_index = get_u16(bytecode, *index + 1);
-            let descriptor_index = get_u16(bytecode, *index + 3);
+            let name_index = get_u16(bytecode, *index + 1) as usize;
+            let descriptor_index = get_u16(bytecode, *index + 3) as usize;
             *index += 5;
             CpEntry::NameAndType(name_index, descriptor_index)
         }
@@ -179,8 +179,8 @@ fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u
     )
 }
 
-fn read_attribute(bytecode: &[u8], index: &mut usize) -> Attribute {
-    let attribute_name_index = get_u16(bytecode, *index);
+fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut usize) -> Attribute {
+    let attribute_name_index = get_u16(bytecode, *index) as usize;
     *index += 2;
     let attribute_length = read_u32(bytecode, *index) as usize;
     *index += 4;
@@ -229,7 +229,7 @@ pub enum CpEntry {
     Fieldref(u16, u16),
     MethodRef(u16, u16),
     InterfaceMethodref(u16, u16),
-    NameAndType(u16, u16),
+    NameAndType(usize, usize),
 }
 
 

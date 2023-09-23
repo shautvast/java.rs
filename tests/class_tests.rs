@@ -14,13 +14,19 @@ mod test {
         assert_eq!("public <init>(Ljava/lang/String;)V", &class.methods[0].name());
         assert_eq!("public getName()Ljava/lang/String;", &class.methods[1].name());
         assert_eq!("public print()V", &class.methods[2].name());
-
     }
 
     #[test]
     fn get_fields() {
         let class = get_class();
         assert_eq!("private final Ljava/lang/String; name", &class.fields[0].name())
+    }
+
+    #[test]
+    fn get_code() {
+        let class = get_class();
+        println!("{:?}", &class.methods[0].get_code());
+        println!("{:?}", &class.methods[1].get_code());
     }
 
     fn get_class() -> Class {
@@ -69,14 +75,14 @@ mod test {
             methods: vec![
                 Method::new(
                     cp.clone(), 1, 9, 10, vec![Attribute {
-                        attribute_name_index: 18,
+                        attribute_name_index: 11,
                         info: vec![0, 2, 0, 2, 0, 0, 0, 10, 42, 183, 0, 1, 42, 43, 181, 0, 2, 177, 0,
                                    0, 0, 1, 0, 12, 0, 0, 0, 14, 0, 3, 0, 0, 0, 7, 0, 4, 0, 8, 0, 9, 0, 9],
                     }],
                 ),
                 Method::new(
                     cp.clone(), 1, 13, 14, vec![Attribute {
-                        attribute_name_index: 18,
+                        attribute_name_index: 11,
                         info: vec![0, 1, 0, 1, 0, 0, 0, 5, 42, 180, 0, 2, 176, 0, 0, 0, 1, 0, 12, 0,
                                    0, 0, 6, 0, 1, 0, 0, 0, 12],
                     }],

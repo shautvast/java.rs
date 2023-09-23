@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use crate::CpEntry;
+use crate::CpEntry::NameAndType;
 
 #[derive(Debug)]
 //TODO create factory function
@@ -28,7 +29,7 @@ pub struct Method {
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
-    _attributes: Vec<Attribute>,
+    attributes: Vec<Attribute>,
 }
 
 impl Method {
@@ -37,7 +38,7 @@ impl Method {
                name_index: usize,
                descriptor_index: usize,
                attributes: Vec<Attribute>, ) -> Self {
-        Method { constant_pool, access_flags, name_index, descriptor_index, _attributes:attributes }
+        Method { constant_pool, access_flags, name_index, descriptor_index, attributes }
     }
 
     pub fn name(&self) -> String {
@@ -51,6 +52,17 @@ impl Method {
 
 
         full_name
+    }
+
+    pub fn get_code(&self) {
+        for att in &self.attributes {
+            if let CpEntry::Utf8(str) = &self.constant_pool[&att.attribute_name_index - 1] {
+                println!("{}", str);
+                if str == "Code" {
+                    println!("{:?}", att.info);
+                }
+            }
+        }
     }
 }
 
@@ -69,7 +81,7 @@ impl Field {
                name_index: usize,
                descriptor_index: usize,
                attributes: Vec<Attribute>, ) -> Self {
-        Field { constant_pool, access_flags, name_index, descriptor_index, _attributes:attributes }
+        Field { constant_pool, access_flags, name_index, descriptor_index, _attributes: attributes }
     }
 
     pub fn name(&self) -> String {
@@ -89,7 +101,7 @@ impl Field {
 
 #[derive(Debug)]
 pub struct Attribute {
-    pub attribute_name_index: u16,
+    pub attribute_name_index: usize,
     pub info: Vec<u8>,
 }
 
@@ -115,3 +127,54 @@ pub fn get_modifier(value: u16) -> String {
     }
     output
 }
+
+use std::cell::OnceCell;
+use std::collections::HashMap;
+use crate::types::AttributeType::{BootstrapMethods, Code, ConstantValue, NestHost, NestMembers, PermittedSubclasses, StackMapTable};
+
+enum AttributeType {
+    ConstantValue,
+    Code,
+    StackMapTable,
+    BootstrapMethods,
+    NestHost,
+    NestMembers,
+    PermittedSubclasses,
+    Exceptions,
+    InnerClasses,
+    EnclosingMethod,
+    Synthetic,
+    Signature,
+    Record,
+    SourceFile,
+    LineNumberTable,
+    LocalVariableTable,
+    LocalVariableTypeTable,
+    SourceDebugExtension,
+    Deprecated,
+    RuntimeVisibleAnnotations,
+    RuntimeInvisibleAnnotations,
+    RuntimeVisibleParameterAnnotations,
+    RuntimeInvisibleParameterAnnotations,
+    RuntimeVisibleTypeAnnotations,
+    RuntimeInvisibleTypeAnnotations,
+    AnnotationDefault,
+    MethodParameters,
+    Module,
+    ModulePackages,
+    ModuleMainClass,
+}
+
+const cell: OnceCell<HashMap<&str, AttributeType>> = OnceCell::new();
+
+const value: &HashMap<&str, AttributeType> = cell.get_or_init(|| {
+    let mut map = HashMap::with_capacity(18);
+    map.insert("ConstantValue", ConstantValue);
+    map.insert("Code", Code);
+    map.insert("StackMapTable", StackMapTable);
+    map.insert("BootstrapMethods", BootstrapMethods);
+    map.insert("NestHost", NestHost);
+    map.insert("NestMembers", NestMembers);
+    map.insert("PermittedSubclasses", PermittedSubclasses);
+    map
+});
