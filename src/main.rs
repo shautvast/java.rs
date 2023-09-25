@@ -4,8 +4,10 @@ use std::io::Read;
 fn main() {
     let bytecode = read_class_file("./Dummy.class");
     if let Some(class) = classfile_reader::get_class(bytecode){
-        println!("{:?}", class);
+        let ret = class.execute("public static get()I");
+        println!("{:?}", ret);
     }
+
 }
 
 fn read_class_file(name: &str) -> Vec<u8> {

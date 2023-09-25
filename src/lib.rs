@@ -1,6 +1,8 @@
 pub mod types;
 mod io;
+pub mod opcodes;
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use crate::io::{read_f32, read_f64, read_i32, read_i64, read_u16, read_u32};
 use crate::types::{AttributeType, Class, MethodCode, Exception, Field, Method};
@@ -38,18 +40,19 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
 
     let methods_count = read_u16(&bytecode, index);
     index += 2;
-    let mut methods = vec![];
+    let mut methods = HashMap::new();
     for _ in 0..methods_count {
-        methods.push(read_method(constant_pool.clone(), &mut index, &bytecode));
+        let m = read_method(constant_pool.clone(), &mut index, &bytecode);
+        methods.insert(m.name(), m);
     }
 
     let attributes_count = read_u16(&bytecode, index);
     index += 2;
-    let mut attributes = vec![];
+    let mut attributes = HashMap::new();
     for _ in 0..attributes_count {
         let some = read_attribute(constant_pool.clone(), &bytecode, &mut index);
         if let Some(att) = some {
-            attributes.push(att);
+            attributes.insert(att.0, att.1);
         } else {
             panic!(); // bug/not-implemented
         }
@@ -154,10 +157,10 @@ fn read_field(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8
     let descriptor_index = read_u16(bytecode, *index + 4) as usize;
     let attributes_count = read_u16(bytecode, *index + 6);
     *index += 8;
-    let mut attributes = vec![];
+    let mut attributes = HashMap::new();
     for _ in 0..attributes_count {
         if let Some(att) = read_attribute(constant_pool.clone(), bytecode, index) {
-            attributes.push(att);
+            attributes.insert(att.0, att.1);
         } else {
             panic!(); // bug/not-implemented
         }
@@ -178,10 +181,10 @@ fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u
     let attributes_count = read_u16(bytecode, *index + 6);
     *index += 8;
 
-    let mut attributes = vec![];
+    let mut attributes = HashMap::new();
     for _ in 0..attributes_count {
         if let Some(att) = read_attribute(constant_pool.clone(), bytecode, index) {
-            attributes.push(att);
+            attributes.insert(att.0, att.1);
         }
     }
 
@@ -194,7 +197,7 @@ fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u
     )
 }
 
-fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<AttributeType> {
+fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<(String, AttributeType)> {
     let attribute_name_index = read_u16(bytecode, *index) as usize;
     *index += 2;
     let attribute_length = read_u32(bytecode, *index) as usize;
@@ -208,7 +211,7 @@ fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut 
         return match s.as_str() {
             "ConstantValue" => {
                 assert_eq!(info.len(), 2);
-                Some(AttributeType::ConstantValue(read_u16(&info, 0)))
+                Some(("ConstantValue".into(), AttributeType::ConstantValue(read_u16(&info, 0))))
             }
             "Code" => {
                 let max_stack = read_u16(&info, 0);
@@ -225,15 +228,15 @@ fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut 
                 }
                 let attribute_count = read_u16(&info, code_index);
                 code_index += 2;
-                let mut code_attributes = vec![];
+                let mut code_attributes = HashMap::new();
                 for _ in 0..attribute_count {
                     if let Some(att) = read_attribute(constant_pool.clone(), &info, &mut code_index) {
-                        code_attributes.push(att);
+                        code_attributes.insert(att.0, att.1);
                     }
                 }
-                Some(AttributeType::Code(MethodCode::new(max_stack, max_locals, code, exception_table, code_attributes)))
+                Some(("Code".into(), AttributeType::Code(MethodCode::new(max_stack, max_locals, code, exception_table, code_attributes))))
             }
-            "SourceFile" => Some(AttributeType::SourceFile),
+            "SourceFile" => Some(("SourceFile".into(), AttributeType::SourceFile)),
             _ => None
         };
     }

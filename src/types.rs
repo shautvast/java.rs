@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::rc::Rc;
-use crate::CpEntry;
+use crate::{CpEntry, opcodes};
 
 #[derive(Debug)]
 //TODO create factory function
@@ -12,13 +13,18 @@ pub struct Class {
     pub super_class: u16,
     pub interfaces: Vec<u16>,
     pub fields: Vec<Field>,
-    pub methods: Vec<Method>,
-    pub attributes: Vec<AttributeType>,
+    pub methods: HashMap<String, Method>,
+    pub attributes: HashMap<String, AttributeType>,
 }
 
 impl Class {
     pub fn get_version(&self) -> (u16, u16) {
         (self.major_version, self.minor_version)
+    }
+
+    pub fn execute(&self, method_name: &str) -> Value {
+        let m = self.methods.get(method_name).unwrap();
+        m.execute().unwrap() //TODO remove unwrap
     }
 }
 
@@ -27,7 +33,7 @@ pub struct Method {
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
-    attributes: Vec<AttributeType>,
+    attributes: HashMap<String, AttributeType>,
 }
 
 impl fmt::Debug for Method {
@@ -42,7 +48,7 @@ impl Method {
                access_flags: u16,
                name_index: usize,
                descriptor_index: usize,
-               attributes: Vec<AttributeType>, ) -> Self {
+               attributes: HashMap<String, AttributeType>, ) -> Self {
         Method { constant_pool, access_flags, name_index, descriptor_index, attributes }
     }
 
@@ -59,16 +65,29 @@ impl Method {
         full_name
     }
 
-    // pub fn get_code(&self) {
-    //     for att in &self.attributes {
-    //         if let CpEntry::Utf8(_, str) = &self.constant_pool[&att.attribute_name_index - 1] {
-    //             println!("{}", str);
-    //             if str == "Code" {
-    //                 println!("{:?}", att.info);
-    //             }
-    //         }
-    //     }
-    // }
+    pub fn execute(&self) -> Option<Value> {
+        if let AttributeType::Code(code) = self.attributes.get("Code").unwrap() {
+            let mut stack = Stack::new();
+            let mut pc: usize = 0;
+            while pc < code.opcodes.len() {
+                let opcode = &code.opcodes[pc];
+                match opcode {
+                    &opcodes::bipush => {
+                        pc += 1;
+                        let c = code.opcodes[pc] as i32;
+                        stack.push(Value::I32(c));
+                    },
+                    &opcodes::ireturn => {
+                        return stack.pop();
+                    },
+                    //TODO implement all opcodes
+                    _ => {}
+                }
+                pc += 1;
+            }
+        }
+        None // TODO error situation
+    }
 }
 
 pub struct Field {
@@ -76,10 +95,11 @@ pub struct Field {
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
-    attributes: Vec<AttributeType>,
+    attributes: HashMap<String, AttributeType>,
 }
 
 use std::fmt;
+use std::hash::Hash;
 use crate::io::read_u16;
 
 impl fmt::Debug for Field {
@@ -94,7 +114,7 @@ impl Field {
                access_flags: u16,
                name_index: usize,
                descriptor_index: usize,
-               attributes: Vec<AttributeType>, ) -> Self {
+               attributes: HashMap<String, AttributeType>, ) -> Self {
         Field { constant_pool, access_flags, name_index, descriptor_index, attributes: attributes }
     }
 
@@ -193,16 +213,42 @@ impl Exception {
 pub struct MethodCode {
     max_stack: u16,
     max_locals: u16,
-    code: Vec<u8>,
+    opcodes: Vec<u8>,
     exception_table: Vec<Exception>,
-    code_attributes: Vec<AttributeType>,
+    code_attributes: HashMap<String, AttributeType>,
 }
 
 impl MethodCode {
     pub(crate) fn new(max_stack: u16, max_locals: u16,
                       code: Vec<u8>,
                       exception_table: Vec<Exception>,
-                      code_attributes: Vec<AttributeType>) -> Self {
-        Self { max_stack, max_locals, code, exception_table, code_attributes }
+                      code_attributes: HashMap<String, AttributeType>) -> Self {
+        Self { max_stack, max_locals, opcodes: code, exception_table, code_attributes }
     }
+}
+
+struct Stack {
+    data: Vec<Value>,
+}
+
+impl Stack {
+    fn new() -> Self {
+        Self {
+            data: vec![]
+        }
+    }
+
+    fn push(&mut self, val: Value) {
+        self.data.push(val);
+    }
+
+    fn pop(&mut self) -> Option<Value> {
+        self.data.pop()
+    }
+}
+
+#[derive(Debug)]
+pub enum Value {
+    Void,
+    I32(i32),
 }
