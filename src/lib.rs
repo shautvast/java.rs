@@ -11,10 +11,14 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     check_magic(&bytecode);
 
     let constant_pool_count = read_u16(&bytecode, 8);
+    // println!("cp count: {}", constant_pool_count);
     let mut index = 10;
-    let mut constant_pool: Vec<CpEntry> = vec![];
-    for cp_index in 0..constant_pool_count - 1 {
-        constant_pool.push(read_constant_pool_entry((cp_index + 1) as usize, &mut index, &bytecode));
+    let mut constant_pool: HashMap<usize, CpEntry> = HashMap::with_capacity(constant_pool_count as usize);
+    let mut cp_index: usize = 1;
+    for _ in 1..constant_pool_count - 1
+    {
+        constant_pool.insert(cp_index, read_constant_pool_entry(&mut cp_index, &mut index, &bytecode));
+        cp_index += 1;
     }
 
     let constant_pool = Rc::new(constant_pool);
@@ -78,68 +82,73 @@ fn check_magic(bytecode: &[u8]) {
     }
 }
 
-fn read_constant_pool_entry(cp_index: usize, index: &mut usize, bytecode: &[u8]) -> CpEntry {
+fn read_constant_pool_entry(cp_index: &mut usize, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = bytecode[*index];
+    // println!("#{}: {}", cp_index, tag);
     match tag {
         1 => {
             let len = read_u16(bytecode, *index + 1) as usize;
             let utf: Vec<u8> = Vec::from(&bytecode[*index + 3..*index + 3 + len]);
             *index += len + 3;
-            CpEntry::Utf8(cp_index, String::from_utf8(utf).unwrap())
+            CpEntry::Utf8(*cp_index, String::from_utf8(utf).unwrap())
         }
         3 => {
             let value = read_i32(bytecode, *index + 1);
             *index += 5;
-            CpEntry::Integer(cp_index, value)
+            CpEntry::Integer(*cp_index, value)
         }
         4 => {
             let value = read_f32(bytecode, *index + 1);
             *index += 5;
-            CpEntry::Float(cp_index, value)
+            CpEntry::Float(*cp_index, value)
         }
         5 => {
             let value = read_i64(bytecode, *index + 1);
             *index += 9;
-            CpEntry::Long(cp_index, value)
+            let r = CpEntry::Long(*cp_index, value);
+            *cp_index += 1;
+            r
         }
         6 => {
             let value = read_f64(bytecode, *index + 1);
             *index += 9;
-            CpEntry::Double(cp_index, value)
+            let r = CpEntry::Double(*cp_index, value);
+            *cp_index += 1;
+            r
         }
         7 => {
             let name_index = read_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::ClassRef(cp_index, name_index)
+            CpEntry::ClassRef(*cp_index, name_index)
         }
         8 => {
             let string_index = read_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::StringRef(cp_index, string_index)
+            CpEntry::StringRef(*cp_index, string_index)
         }
         9 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::Fieldref(cp_index, class_index, name_and_type_index)
+            CpEntry::Fieldref(*cp_index, class_index, name_and_type_index)
         }
         10 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::MethodRef(cp_index, class_index, name_and_type_index)
+            CpEntry::MethodRef(*cp_index, class_index, name_and_type_index)
         }
         11 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::InterfaceMethodref(cp_index, class_index, name_and_type_index)
+            CpEntry::InterfaceMethodref(*cp_index, class_index, name_and_type_index)
         }
         12 => {
             let name_index = read_u16(bytecode, *index + 1) as usize;
             let descriptor_index = read_u16(bytecode, *index + 3) as usize;
             *index += 5;
-            CpEntry::NameAndType(cp_index, name_index, descriptor_index)
+            CpEntry::NameAndType(*cp_index, name_index, descriptor_index)
         }
         // 15 MethodHandle,
         // 16 MethodType,
@@ -147,11 +156,12 @@ fn read_constant_pool_entry(cp_index: usize, index: &mut usize, bytecode: &[u8])
         // 18 InvokeDynamic,
         // 19 Module,
         // 20 Package,
-        _ => panic!()
+
+        _ => panic!("cp entry type not recognized")
     }
 }
 
-fn read_field(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Field {
+fn read_field(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Field {
     let access_flags = read_u16(bytecode, *index);
     let name_index = read_u16(bytecode, *index + 2) as usize;
     let descriptor_index = read_u16(bytecode, *index + 4) as usize;
@@ -162,7 +172,7 @@ fn read_field(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8
         if let Some(att) = read_attribute(constant_pool.clone(), bytecode, index) {
             attributes.insert(att.0, att.1);
         } else {
-            panic!(); // bug/not-implemented
+            panic!("attribute not recognized"); // bug/not-implemented
         }
     }
     Field::new(
@@ -174,7 +184,7 @@ fn read_field(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8
     )
 }
 
-fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Method {
+fn read_method(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Method {
     let access_flags = read_u16(bytecode, *index);
     let name_index = read_u16(bytecode, *index + 2) as usize;
     let descriptor_index = read_u16(bytecode, *index + 4) as usize;
@@ -197,7 +207,7 @@ fn read_method(constant_pool: Rc<Vec<CpEntry>>, index: &mut usize, bytecode: &[u
     )
 }
 
-fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<(String, AttributeType)> {
+fn read_attribute(constant_pool: Rc<HashMap<usize, CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<(String, AttributeType)> {
     let attribute_name_index = read_u16(bytecode, *index) as usize;
     *index += 2;
     let attribute_length = read_u32(bytecode, *index) as usize;
@@ -206,8 +216,8 @@ fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut 
     *index += attribute_length;
 
 
-    if let CpEntry::Utf8(_, s) = &constant_pool[attribute_name_index - 1] {
-        // println!("{}", s);
+    if let CpEntry::Utf8(_, s) = &constant_pool.get(&attribute_name_index).unwrap() {
+        // println!("Att [{}]", s);
         return match s.as_str() {
             "ConstantValue" => {
                 assert_eq!(info.len(), 2);
@@ -237,6 +247,7 @@ fn read_attribute(constant_pool: Rc<Vec<CpEntry>>, bytecode: &[u8], index: &mut 
                 Some(("Code".into(), AttributeType::Code(MethodCode::new(max_stack, max_locals, code, exception_table, code_attributes))))
             }
             "SourceFile" => Some(("SourceFile".into(), AttributeType::SourceFile)),
+            "LineNumberTable" => Some(("SourceFile".into(), AttributeType::LineNumberTable)),
             _ => None
         };
     }

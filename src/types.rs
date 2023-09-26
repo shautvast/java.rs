@@ -7,7 +7,7 @@ use crate::{CpEntry, opcodes};
 pub struct Class {
     pub minor_version: u16,
     pub major_version: u16,
-    pub constant_pool: Rc<Vec<CpEntry>>,
+    pub constant_pool: Rc<HashMap<usize, CpEntry>>,
     pub access_flags: u16,
     pub this_class: u16,
     pub super_class: u16,
@@ -29,7 +29,7 @@ impl Class {
 }
 
 pub struct Method {
-    constant_pool: Rc<Vec<CpEntry>>,
+    constant_pool: Rc<HashMap<usize, CpEntry>>,
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
@@ -44,7 +44,7 @@ impl fmt::Debug for Method {
 }
 
 impl Method {
-    pub fn new(constant_pool: Rc<Vec<CpEntry>>,
+    pub fn new(constant_pool: Rc<HashMap<usize, CpEntry>>,
                access_flags: u16,
                name_index: usize,
                descriptor_index: usize,
@@ -54,10 +54,10 @@ impl Method {
 
     pub fn name(&self) -> String {
         let mut full_name = get_modifier(self.access_flags);
-        if let CpEntry::Utf8(_, s) = &self.constant_pool[&self.name_index - 1] {
+        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.name_index).unwrap() {
             full_name.push_str(s);
         }
-        if let CpEntry::Utf8(_, s) = &self.constant_pool[&self.descriptor_index - 1] {
+        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             full_name.push_str(s);
         }
 
@@ -76,10 +76,10 @@ impl Method {
                         pc += 1;
                         let c = code.opcodes[pc] as i32;
                         stack.push(Value::I32(c));
-                    },
+                    }
                     &opcodes::ireturn => {
                         return stack.pop();
-                    },
+                    }
                     //TODO implement all opcodes
                     _ => {}
                 }
@@ -91,7 +91,7 @@ impl Method {
 }
 
 pub struct Field {
-    constant_pool: Rc<Vec<CpEntry>>,
+    constant_pool: Rc<HashMap<usize, CpEntry>>,
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
@@ -110,7 +110,7 @@ impl fmt::Debug for Field {
 }
 
 impl Field {
-    pub fn new(constant_pool: Rc<Vec<CpEntry>>,
+    pub fn new(constant_pool: Rc<HashMap<usize, CpEntry>>,
                access_flags: u16,
                name_index: usize,
                descriptor_index: usize,
@@ -121,11 +121,11 @@ impl Field {
     pub fn name(&self) -> String {
         let mut full_name = get_modifier(self.access_flags);
 
-        if let CpEntry::Utf8(_, s) = &self.constant_pool[&self.descriptor_index - 1] {
+        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             full_name.push_str(s);
         }
         full_name.push(' ');
-        if let CpEntry::Utf8(_, s) = &self.constant_pool[&self.name_index - 1] {
+        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.name_index).unwrap() {
             full_name.push_str(s);
         }
 

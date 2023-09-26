@@ -1,6 +1,8 @@
 public class Dummy {
 
-    public static int get(){
-        return 42;
+    private final static double answer = 42.0;
+
+    public static double get(){
+        return answer;
     }
 }
