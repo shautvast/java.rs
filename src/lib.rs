@@ -1,5 +1,5 @@
 pub mod types;
-mod io;
+pub mod io;
 pub mod opcodes;
 
 use std::collections::HashMap;
@@ -11,12 +11,12 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     check_magic(&bytecode);
 
     let constant_pool_count = read_u16(&bytecode, 8);
-    // println!("cp count: {}", constant_pool_count);
+    println!("cp count: {}", constant_pool_count);
     let mut index = 10;
     let mut constant_pool: HashMap<usize, CpEntry> = HashMap::with_capacity(constant_pool_count as usize);
-    let mut cp_index: usize = 1;
-    for _ in 1..constant_pool_count - 1
-    {
+    let mut cp_index = 1;
+    while cp_index < constant_pool_count as usize {
+        println!("cp#{}", cp_index);
         constant_pool.insert(cp_index, read_constant_pool_entry(&mut cp_index, &mut index, &bytecode));
         cp_index += 1;
     }
@@ -28,6 +28,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     let super_class = read_u16(&bytecode, index + 4);
 
     let interfaces_count = read_u16(&bytecode, index + 6);
+    println!("interfaces count: {}", interfaces_count);
     index += 8;
     let mut interfaces = vec![];
     for _ in 0..interfaces_count {
@@ -84,71 +85,71 @@ fn check_magic(bytecode: &[u8]) {
 
 fn read_constant_pool_entry(cp_index: &mut usize, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = bytecode[*index];
-    // println!("#{}: {}", cp_index, tag);
+    println!("#{}: {}", cp_index, tag);
     match tag {
         1 => {
             let len = read_u16(bytecode, *index + 1) as usize;
             let utf: Vec<u8> = Vec::from(&bytecode[*index + 3..*index + 3 + len]);
             *index += len + 3;
-            CpEntry::Utf8(*cp_index, String::from_utf8(utf).unwrap())
+            CpEntry::Utf8(String::from_utf8(utf).unwrap())
         }
         3 => {
             let value = read_i32(bytecode, *index + 1);
             *index += 5;
-            CpEntry::Integer(*cp_index, value)
+            CpEntry::Integer(value)
         }
         4 => {
             let value = read_f32(bytecode, *index + 1);
             *index += 5;
-            CpEntry::Float(*cp_index, value)
+            CpEntry::Float(value)
         }
         5 => {
             let value = read_i64(bytecode, *index + 1);
             *index += 9;
-            let r = CpEntry::Long(*cp_index, value);
+            let r = CpEntry::Long(value);
             *cp_index += 1;
             r
         }
         6 => {
             let value = read_f64(bytecode, *index + 1);
             *index += 9;
-            let r = CpEntry::Double(*cp_index, value);
+            let r = CpEntry::Double(value);
             *cp_index += 1;
             r
         }
         7 => {
             let name_index = read_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::ClassRef(*cp_index, name_index)
+            CpEntry::ClassRef(name_index)
         }
         8 => {
             let string_index = read_u16(bytecode, *index + 1);
             *index += 3;
-            CpEntry::StringRef(*cp_index, string_index)
+            CpEntry::StringRef(string_index)
         }
         9 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::Fieldref(*cp_index, class_index, name_and_type_index)
+            CpEntry::Fieldref(class_index, name_and_type_index)
         }
         10 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::MethodRef(*cp_index, class_index, name_and_type_index)
+            CpEntry::MethodRef(class_index, name_and_type_index)
         }
         11 => {
             let class_index = read_u16(bytecode, *index + 1);
             let name_and_type_index = read_u16(bytecode, *index + 3);
             *index += 5;
-            CpEntry::InterfaceMethodref(*cp_index, class_index, name_and_type_index)
+            CpEntry::InterfaceMethodref(class_index, name_and_type_index)
         }
         12 => {
             let name_index = read_u16(bytecode, *index + 1) as usize;
             let descriptor_index = read_u16(bytecode, *index + 3) as usize;
             *index += 5;
-            CpEntry::NameAndType(*cp_index, name_index, descriptor_index)
+            CpEntry::NameAndType(name_index, descriptor_index)
         }
         // 15 MethodHandle,
         // 16 MethodType,
@@ -216,7 +217,7 @@ fn read_attribute(constant_pool: Rc<HashMap<usize, CpEntry>>, bytecode: &[u8], i
     *index += attribute_length;
 
 
-    if let CpEntry::Utf8(_, s) = &constant_pool.get(&attribute_name_index).unwrap() {
+    if let CpEntry::Utf8(s) = &constant_pool.get(&attribute_name_index).unwrap() {
         // println!("Att [{}]", s);
         return match s.as_str() {
             "ConstantValue" => {
@@ -256,16 +257,16 @@ fn read_attribute(constant_pool: Rc<HashMap<usize, CpEntry>>, bytecode: &[u8], i
 
 #[derive(Debug)]
 pub enum CpEntry {
-    Utf8(usize, String),
-    Integer(usize, i32),
-    Float(usize, f32),
-    Long(usize, i64),
-    Double(usize, f64),
-    ClassRef(usize, u16),
-    StringRef(usize, u16),
-    Fieldref(usize, u16, u16),
-    MethodRef(usize, u16, u16),
-    InterfaceMethodref(usize, u16, u16),
-    NameAndType(usize, usize, usize),
+    Utf8(String),
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    ClassRef(u16),
+    StringRef(u16),
+    Fieldref(u16, u16),
+    MethodRef(u16, u16),
+    InterfaceMethodref(u16, u16),
+    NameAndType(usize, usize),
 }
 

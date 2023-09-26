@@ -1,6 +1,10 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::hash::Hash;
 use std::rc::Rc;
+
 use crate::{CpEntry, opcodes};
+use crate::io::read_u16;
 
 #[derive(Debug)]
 //TODO create factory function
@@ -54,10 +58,10 @@ impl Method {
 
     pub fn name(&self) -> String {
         let mut full_name = get_modifier(self.access_flags);
-        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.name_index).unwrap() {
+        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.name_index).unwrap() {
             full_name.push_str(s);
         }
-        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
+        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             full_name.push_str(s);
         }
 
@@ -71,19 +75,31 @@ impl Method {
             let mut pc: usize = 0;
             while pc < code.opcodes.len() {
                 let opcode = &code.opcodes[pc];
+                pc += 1;
+                println!("{}", opcode);
                 match opcode {
                     &opcodes::bipush => {
-                        pc += 1;
                         let c = code.opcodes[pc] as i32;
                         stack.push(Value::I32(c));
+                        pc += 1;
+                    }
+                    &opcodes::ldc2_w => {
+                        let cp_index = read_u16(&code.opcodes, pc) as usize;
+                        if let CpEntry::Double(d) = self.constant_pool.get(&cp_index).unwrap() {
+                            stack.push(Value::F64(*d));
+                        }
+                        pc += 2;
                     }
                     &opcodes::ireturn => {
                         return stack.pop();
                     }
+                    &opcodes::dreturn => {
+                        return stack.pop();
+                    }
                     //TODO implement all opcodes
-                    _ => {}
+                    _ => { panic!("opcode not implemented") }
                 }
-                pc += 1;
+
             }
         }
         None // TODO error situation
@@ -97,10 +113,6 @@ pub struct Field {
     descriptor_index: usize,
     attributes: HashMap<String, AttributeType>,
 }
-
-use std::fmt;
-use std::hash::Hash;
-use crate::io::read_u16;
 
 impl fmt::Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -121,11 +133,11 @@ impl Field {
     pub fn name(&self) -> String {
         let mut full_name = get_modifier(self.access_flags);
 
-        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
+        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             full_name.push_str(s);
         }
         full_name.push(' ');
-        if let CpEntry::Utf8(_, s) = &self.constant_pool.get(&self.name_index).unwrap() {
+        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.name_index).unwrap() {
             full_name.push_str(s);
         }
 
@@ -251,4 +263,5 @@ impl Stack {
 pub enum Value {
     Void,
     I32(i32),
+    F64(f64),
 }
