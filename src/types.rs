@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::Hash;
 use std::rc::Rc;
 
 use crate::{CpEntry, opcodes};
-use crate::io::read_u16;
+use crate::io::{read_u8, read_u16};
 
 #[derive(Debug)]
 //TODO create factory function
@@ -76,30 +75,66 @@ impl Method {
             while pc < code.opcodes.len() {
                 let opcode = &code.opcodes[pc];
                 pc += 1;
-                println!("{}", opcode);
+                // println!("{}", opcode);
                 match opcode {
-                    &opcodes::bipush => {
+                    &opcodes::BIPUSH => {
                         let c = code.opcodes[pc] as i32;
                         stack.push(Value::I32(c));
                         pc += 1;
                     }
-                    &opcodes::ldc2_w => {
+                    &opcodes::LDC => {
+                        let cp_index = read_u8(&code.opcodes, pc) as usize;
+                        match self.constant_pool.get(&cp_index).unwrap() {
+                            CpEntry::Integer(i) => {
+                                stack.push(Value::I32(*i));
+                            }
+                            CpEntry::Float(f) => {
+                                stack.push(Value::F32(*f));
+                            }
+                            _ => {}
+                        }
+                        pc += 1;
+                    }
+                    &opcodes::LDC_W => {
                         let cp_index = read_u16(&code.opcodes, pc) as usize;
-                        if let CpEntry::Double(d) = self.constant_pool.get(&cp_index).unwrap() {
-                            stack.push(Value::F64(*d));
+                        match self.constant_pool.get(&cp_index).unwrap() {
+                            CpEntry::Integer(i) => {
+                                stack.push(Value::I32(*i));
+                            }
+                            CpEntry::Float(f) => {
+                                stack.push(Value::F32(*f));
+                            }
+                            _ => { panic!("unexpected") }
                         }
                         pc += 2;
                     }
-                    &opcodes::ireturn => {
+                    &opcodes::LDC2_W => {
+                        let cp_index = read_u16(&code.opcodes, pc) as usize;
+                        match self.constant_pool.get(&cp_index).unwrap() {
+                            CpEntry::Double(d) => {
+                                stack.push(Value::F64(*d));
+                            }
+                            CpEntry::Long(l) => {
+                                stack.push(Value::I64(*l));
+                            }
+                            _ => { panic!("unexpected") }
+                        }
+
+
+                        pc += 2;
+                    }
+                    &opcodes::IRETURN => {
                         return stack.pop();
                     }
-                    &opcodes::dreturn => {
+                    &opcodes::DRETURN => {
+                        return stack.pop();
+                    }
+                    &opcodes::FRETURN => {
                         return stack.pop();
                     }
                     //TODO implement all opcodes
                     _ => { panic!("opcode not implemented") }
                 }
-
             }
         }
         None // TODO error situation
@@ -263,5 +298,7 @@ impl Stack {
 pub enum Value {
     Void,
     I32(i32),
+    I64(i64),
+    F32(f32),
     F64(f64),
 }

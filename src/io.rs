@@ -1,6 +1,10 @@
 use std::fs::{self, File};
 use std::io::Read;
 
+pub(crate) fn read_u8(data: &[u8], pos: usize) -> u8 {
+    u8::from_be_bytes(data[pos..pos + 1].try_into().expect("slice with incorrect length"))
+}
+
 pub(crate) fn read_u16(data: &[u8], pos: usize) -> u16 {
     u16::from_be_bytes(data[pos..pos + 2].try_into().expect("slice with incorrect length"))
 }

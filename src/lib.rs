@@ -11,12 +11,12 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     check_magic(&bytecode);
 
     let constant_pool_count = read_u16(&bytecode, 8);
-    println!("cp count: {}", constant_pool_count);
+    // println!("cp count: {}", constant_pool_count);
     let mut index = 10;
     let mut constant_pool: HashMap<usize, CpEntry> = HashMap::with_capacity(constant_pool_count as usize);
     let mut cp_index = 1;
     while cp_index < constant_pool_count as usize {
-        println!("cp#{}", cp_index);
+        // println!("cp#{}", cp_index);
         constant_pool.insert(cp_index, read_constant_pool_entry(&mut cp_index, &mut index, &bytecode));
         cp_index += 1;
     }
@@ -28,7 +28,7 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     let super_class = read_u16(&bytecode, index + 4);
 
     let interfaces_count = read_u16(&bytecode, index + 6);
-    println!("interfaces count: {}", interfaces_count);
+    // println!("interfaces count: {}", interfaces_count);
     index += 8;
     let mut interfaces = vec![];
     for _ in 0..interfaces_count {
@@ -85,7 +85,7 @@ fn check_magic(bytecode: &[u8]) {
 
 fn read_constant_pool_entry(cp_index: &mut usize, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = bytecode[*index];
-    println!("#{}: {}", cp_index, tag);
+    // println!("#{}: {}", cp_index, tag);
     match tag {
         1 => {
             let len = read_u16(bytecode, *index + 1) as usize;
