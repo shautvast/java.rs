@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::{CpEntry, opcodes};
-use crate::io::{read_u8, read_u16};
+use crate::CpEntry;
+use crate::heap::Object;
+use crate::io::read_u16;
 
 #[derive(Debug)]
 //TODO create factory function
@@ -25,18 +26,20 @@ impl Class {
         (self.major_version, self.minor_version)
     }
 
-    pub fn execute(&self, method_name: &str) -> Value {
-        let m = self.methods.get(method_name).unwrap();
-        m.execute().unwrap() //TODO remove unwrap
-    }
+    // pub fn execute(&self, method_name: &str) -> Value {
+    //     let m = self.methods.get(method_name).unwrap();
+    //     execute(m).unwrap() //TODO
+    // }
+
+
 }
 
 pub struct Method {
-    constant_pool: Rc<HashMap<usize, CpEntry>>,
+    pub(crate) constant_pool: Rc<HashMap<usize, CpEntry>>,
     access_flags: u16,
     name_index: usize,
     descriptor_index: usize,
-    attributes: HashMap<String, AttributeType>,
+    pub(crate) attributes: HashMap<String, AttributeType>,
 }
 
 impl fmt::Debug for Method {
@@ -66,78 +69,6 @@ impl Method {
 
 
         full_name
-    }
-
-    pub fn execute(&self) -> Option<Value> {
-        if let AttributeType::Code(code) = self.attributes.get("Code").unwrap() {
-            let mut stack = Stack::new();
-            let mut pc: usize = 0;
-            while pc < code.opcodes.len() {
-                let opcode = &code.opcodes[pc];
-                pc += 1;
-                // println!("{}", opcode);
-                match opcode {
-                    &opcodes::BIPUSH => {
-                        let c = code.opcodes[pc] as i32;
-                        stack.push(Value::I32(c));
-                        pc += 1;
-                    }
-                    &opcodes::LDC => {
-                        let cp_index = read_u8(&code.opcodes, pc) as usize;
-                        match self.constant_pool.get(&cp_index).unwrap() {
-                            CpEntry::Integer(i) => {
-                                stack.push(Value::I32(*i));
-                            }
-                            CpEntry::Float(f) => {
-                                stack.push(Value::F32(*f));
-                            }
-                            _ => {}
-                        }
-                        pc += 1;
-                    }
-                    &opcodes::LDC_W => {
-                        let cp_index = read_u16(&code.opcodes, pc) as usize;
-                        match self.constant_pool.get(&cp_index).unwrap() {
-                            CpEntry::Integer(i) => {
-                                stack.push(Value::I32(*i));
-                            }
-                            CpEntry::Float(f) => {
-                                stack.push(Value::F32(*f));
-                            }
-                            _ => { panic!("unexpected") }
-                        }
-                        pc += 2;
-                    }
-                    &opcodes::LDC2_W => {
-                        let cp_index = read_u16(&code.opcodes, pc) as usize;
-                        match self.constant_pool.get(&cp_index).unwrap() {
-                            CpEntry::Double(d) => {
-                                stack.push(Value::F64(*d));
-                            }
-                            CpEntry::Long(l) => {
-                                stack.push(Value::I64(*l));
-                            }
-                            _ => { panic!("unexpected") }
-                        }
-
-
-                        pc += 2;
-                    }
-                    &opcodes::IRETURN => {
-                        return stack.pop();
-                    }
-                    &opcodes::DRETURN => {
-                        return stack.pop();
-                    }
-                    &opcodes::FRETURN => {
-                        return stack.pop();
-                    }
-                    //TODO implement all opcodes
-                    _ => { panic!("opcode not implemented") }
-                }
-            }
-        }
-        None // TODO error situation
     }
 }
 
@@ -177,6 +108,13 @@ impl Field {
         }
 
         full_name
+    }
+
+    pub fn type_of(&self) -> &String {
+        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
+            return s;
+        }
+        panic!()
     }
 }
 
@@ -260,7 +198,7 @@ impl Exception {
 pub struct MethodCode {
     max_stack: u16,
     max_locals: u16,
-    opcodes: Vec<u8>,
+    pub(crate) opcodes: Vec<u8>,
     exception_table: Vec<Exception>,
     code_attributes: HashMap<String, AttributeType>,
 }
@@ -274,25 +212,7 @@ impl MethodCode {
     }
 }
 
-struct Stack {
-    data: Vec<Value>,
-}
 
-impl Stack {
-    fn new() -> Self {
-        Self {
-            data: vec![]
-        }
-    }
-
-    fn push(&mut self, val: Value) {
-        self.data.push(val);
-    }
-
-    fn pop(&mut self) -> Option<Value> {
-        self.data.pop()
-    }
-}
 
 #[derive(Debug)]
 pub enum Value {

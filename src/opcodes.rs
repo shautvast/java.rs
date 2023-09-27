@@ -20,7 +20,7 @@ pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant 
 // pub const dload_1:u8 = 39; //  (0x27) Load double 1 from local variable
 // pub const dload_2:u8 = 40; //  (0x28) Load double 2 from local variable
 // pub const dload_3:u8 = 41; // (0x29) Load double 3 from local variable
-// pub const aload_0:u8 = 42;// (0x2a)
+pub const ALOAD_0:u8 = 42;// (0x2a)
 // pub const aload_1:u8 = 43;// (0x2a)
 // pub const aload_2:u8 = 44;// (0x2b)
 // pub const aload_3:u8 = 45;// (0x2c)
@@ -85,6 +85,7 @@ pub const FRETURN: u8 = 174; // (0xae) Return float from method
 pub const DRETURN: u8 = 175; // (0xaf) Return double from method
 // pub const areturn: u8 = 176; //(0xb0) return reference
 // pub const return_v: u8 = 177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
+pub const NEW: u8 = 187; // (0xbb) Create new object
 // pub const invokevirtual: u8 = 182; // (0xb6) Invoke instance method; dispatch based on class
 //
 // pub const getstatic: u8 = 178; // (0xb2) Get static field from class

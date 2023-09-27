@@ -1,11 +1,13 @@
-pub mod types;
+pub mod class;
 pub mod io;
 pub mod opcodes;
+pub mod vm;
+mod heap;
 
 use std::collections::HashMap;
 use std::rc::Rc;
 use crate::io::{read_f32, read_f64, read_i32, read_i64, read_u16, read_u32};
-use crate::types::{AttributeType, Class, MethodCode, Exception, Field, Method};
+use crate::class::{AttributeType, Class, MethodCode, Exception, Field, Method};
 
 pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     check_magic(&bytecode);
