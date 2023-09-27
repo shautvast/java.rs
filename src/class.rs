@@ -11,7 +11,7 @@ use crate::io::read_u16;
 pub struct Class {
     pub minor_version: u16,
     pub major_version: u16,
-    pub constant_pool: Rc<HashMap<usize, CpEntry>>,
+    pub constant_pool: Rc<HashMap<u16, CpEntry>>,
     pub access_flags: u16,
     pub this_class: u16,
     pub super_class: u16,
@@ -35,10 +35,10 @@ impl Class {
 }
 
 pub struct Method {
-    pub(crate) constant_pool: Rc<HashMap<usize, CpEntry>>,
+    pub(crate) constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,
-    name_index: usize,
-    descriptor_index: usize,
+    name_index: u16,
+    descriptor_index: u16,
     pub(crate) attributes: HashMap<String, AttributeType>,
 }
 
@@ -50,10 +50,10 @@ impl fmt::Debug for Method {
 }
 
 impl Method {
-    pub fn new(constant_pool: Rc<HashMap<usize, CpEntry>>,
+    pub fn new(constant_pool: Rc<HashMap<u16, CpEntry>>,
                access_flags: u16,
-               name_index: usize,
-               descriptor_index: usize,
+               name_index: u16,
+               descriptor_index: u16,
                attributes: HashMap<String, AttributeType>, ) -> Self {
         Method { constant_pool, access_flags, name_index, descriptor_index, attributes }
     }
@@ -73,10 +73,10 @@ impl Method {
 }
 
 pub struct Field {
-    constant_pool: Rc<HashMap<usize, CpEntry>>,
+    constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,
-    name_index: usize,
-    descriptor_index: usize,
+    name_index: u16,
+    descriptor_index: u16,
     attributes: HashMap<String, AttributeType>,
 }
 
@@ -88,10 +88,10 @@ impl fmt::Debug for Field {
 }
 
 impl Field {
-    pub fn new(constant_pool: Rc<HashMap<usize, CpEntry>>,
+    pub fn new(constant_pool: Rc<HashMap<u16, CpEntry>>,
                access_flags: u16,
-               name_index: usize,
-               descriptor_index: usize,
+               name_index: u16,
+               descriptor_index: u16,
                attributes: HashMap<String, AttributeType>, ) -> Self {
         Field { constant_pool, access_flags, name_index, descriptor_index, attributes: attributes }
     }

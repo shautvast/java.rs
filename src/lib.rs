@@ -15,9 +15,9 @@ pub fn get_class(bytecode: Vec<u8>) -> Option<Class> {
     let constant_pool_count = read_u16(&bytecode, 8);
     // println!("cp count: {}", constant_pool_count);
     let mut index = 10;
-    let mut constant_pool: HashMap<usize, CpEntry> = HashMap::with_capacity(constant_pool_count as usize);
+    let mut constant_pool: HashMap<u16, CpEntry> = HashMap::with_capacity(constant_pool_count as usize);
     let mut cp_index = 1;
-    while cp_index < constant_pool_count as usize {
+    while cp_index < constant_pool_count {
         // println!("cp#{}", cp_index);
         constant_pool.insert(cp_index, read_constant_pool_entry(&mut cp_index, &mut index, &bytecode));
         cp_index += 1;
@@ -85,7 +85,7 @@ fn check_magic(bytecode: &[u8]) {
     }
 }
 
-fn read_constant_pool_entry(cp_index: &mut usize, index: &mut usize, bytecode: &[u8]) -> CpEntry {
+fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = bytecode[*index];
     // println!("#{}: {}", cp_index, tag);
     match tag {
@@ -164,10 +164,10 @@ fn read_constant_pool_entry(cp_index: &mut usize, index: &mut usize, bytecode: &
     }
 }
 
-fn read_field(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Field {
+fn read_field(constant_pool: Rc<HashMap<u16, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Field {
     let access_flags = read_u16(bytecode, *index);
-    let name_index = read_u16(bytecode, *index + 2) as usize;
-    let descriptor_index = read_u16(bytecode, *index + 4) as usize;
+    let name_index = read_u16(bytecode, *index + 2);
+    let descriptor_index = read_u16(bytecode, *index + 4);
     let attributes_count = read_u16(bytecode, *index + 6);
     *index += 8;
     let mut attributes = HashMap::new();
@@ -187,10 +187,10 @@ fn read_field(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, byt
     )
 }
 
-fn read_method(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Method {
+fn read_method(constant_pool: Rc<HashMap<u16, CpEntry>>, index: &mut usize, bytecode: &[u8]) -> Method {
     let access_flags = read_u16(bytecode, *index);
-    let name_index = read_u16(bytecode, *index + 2) as usize;
-    let descriptor_index = read_u16(bytecode, *index + 4) as usize;
+    let name_index = read_u16(bytecode, *index + 2);
+    let descriptor_index = read_u16(bytecode, *index + 4);
     let attributes_count = read_u16(bytecode, *index + 6);
     *index += 8;
 
@@ -210,8 +210,8 @@ fn read_method(constant_pool: Rc<HashMap<usize, CpEntry>>, index: &mut usize, by
     )
 }
 
-fn read_attribute(constant_pool: Rc<HashMap<usize, CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<(String, AttributeType)> {
-    let attribute_name_index = read_u16(bytecode, *index) as usize;
+fn read_attribute(constant_pool: Rc<HashMap<u16, CpEntry>>, bytecode: &[u8], index: &mut usize) -> Option<(String, AttributeType)> {
+    let attribute_name_index = read_u16(bytecode, *index);
     *index += 2;
     let attribute_length = read_u32(bytecode, *index) as usize;
     *index += 4;

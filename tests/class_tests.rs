@@ -30,7 +30,7 @@ mod test {
     #[test]
     fn get_constant_foat() {
         let class = get_class(io::read_class_file("tests/Float.class")).unwrap();
-        Vm::new().new_instance(class);
+        Vm::new().new_instance(&class);
         // assert_eq!((55, 0), class.get_version());
         // if let Value::F32(v) = Vm::new().execute(class.methods.get("public static getF()F").unwrap()).unwrap() {
         //     assert_eq!(v, 42.0);

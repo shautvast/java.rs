@@ -39,7 +39,7 @@ impl Vm {
     }
 
     pub fn new_instance(&self, class: &Class) {
-        for f in class.fields {
+        for f in &class.fields {
             println!("{}", f.type_of());
         }
         // Object::new(Rc::new(class))
@@ -60,7 +60,7 @@ impl Vm {
                         pc += 1;
                     }
                     &opcodes::LDC => {
-                        let cp_index = read_u8(&code.opcodes, pc) as usize;
+                        let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
                                 stack.push(Value::I32(*i));
@@ -73,7 +73,7 @@ impl Vm {
                         pc += 1;
                     }
                     &opcodes::LDC_W => {
-                        let cp_index = read_u16(&code.opcodes, pc) as usize;
+                        let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
                                 stack.push(Value::I32(*i));
@@ -86,7 +86,7 @@ impl Vm {
                         pc += 2;
                     }
                     &opcodes::LDC2_W => {
-                        let cp_index = read_u16(&code.opcodes, pc) as usize;
+                        let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
                                 stack.push(Value::F64(*d));
@@ -110,7 +110,7 @@ impl Vm {
                         return stack.pop();
                     }
                     &opcodes::NEW => {
-                        let cp_index = read_u16(&code.opcodes, pc) as usize;
+                        let cp_index = read_u16(&code.opcodes, pc);
                         if let CpEntry::ClassRef(class_name_index) = method.constant_pool.get(&cp_index).unwrap() {
                            if let CpEntry::Utf8(class) = method.constant_pool.get(class_name_index).unwrap(){
 
