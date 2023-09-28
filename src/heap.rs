@@ -1,15 +1,16 @@
+use std::collections::HashMap;
 use std::rc::Rc;
-use crate::class::Class;
+use crate::class::{Class, Value};
 
 pub(crate) struct Object {
     // locked: bool,
     // hashcode: i32,
     class: Rc<Class>,
-    data: Vec<u8>,
+    data: HashMap<u16, Value>, //TODO optimize
 }
 
 impl Object {
-    pub fn new(class: Rc<Class>, data: Vec<u8>) -> Self {
+    pub fn new(class: Rc<Class>, data: HashMap<u16, Value>) -> Self {
         Self {
             class,
             data,

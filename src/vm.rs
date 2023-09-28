@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::{CpEntry, opcodes};
+
+use crate::opcodes;
+use crate::class::{AttributeType, Class, Method, Value};
+use crate::classloader::{CpEntry, load_class};
 use crate::heap::{Heap, Object};
 use crate::io::*;
-use crate::class::{AttributeType, Class, Method, Value};
 
 struct StackFrame {
     data: Vec<Value>,
@@ -26,7 +28,7 @@ impl StackFrame {
 }
 
 pub struct Vm {
-    classes: HashMap<String, Class>,
+    classes: HashMap<String, Class>, //TODO implement classloader
     heap: Heap,
 }
 
@@ -38,11 +40,27 @@ impl Vm {
         }
     }
 
-    pub fn new_instance(&self, class: &Class) {
+    pub fn load_class(name: String){
+        load_class()
+    }
+
+    pub fn new_instance(&self, class: Rc<Class>) {
+        let mut data = HashMap::new();
         for f in &class.fields {
-            println!("{}", f.type_of());
+            let value = match f.type_of().as_str(){
+                "Z" => Value::BOOL(false),
+                "B" => Value::I32(0),
+                "S" => Value::I32(0),
+                "I" => Value::I32(0),
+                "J" => Value::I64(0),
+                "F" => Value::F32(0.0),
+                "D" => Value::F64(0.0),
+                //ref
+                _ => Value::Void
+            };
+            data.insert(f.name_index, value);
         }
-        // Object::new(Rc::new(class))
+        Object::new(class.clone(), data);
     }
 
     pub fn execute(&mut self, method: &Method) -> Option<Value> {

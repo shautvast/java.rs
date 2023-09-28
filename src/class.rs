@@ -3,7 +3,6 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::CpEntry;
-use crate::heap::Object;
 use crate::io::read_u16;
 
 #[derive(Debug)]
@@ -75,7 +74,7 @@ impl Method {
 pub struct Field {
     constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,
-    name_index: u16,
+    pub(crate) name_index: u16,
     descriptor_index: u16,
     attributes: HashMap<String, AttributeType>,
 }
@@ -97,20 +96,18 @@ impl Field {
     }
 
     pub fn name(&self) -> String {
-        let mut full_name = get_modifier(self.access_flags);
+        let mut name = String::new();
 
-        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
-            full_name.push_str(s);
-        }
-        full_name.push(' ');
+        name.push(' ');
         if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.name_index).unwrap() {
-            full_name.push_str(s);
+            name.push_str(s);
         }
 
-        full_name
+        name
     }
 
     pub fn type_of(&self) -> &String {
+        println!("{}", self.name_index);
         if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             return s;
         }
@@ -221,4 +218,6 @@ pub enum Value {
     I64(i64),
     F32(f32),
     F64(f64),
+    BOOL(bool),
+    CHAR(char)
 }

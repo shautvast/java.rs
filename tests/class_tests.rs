@@ -1,4 +1,5 @@
 mod test {
+    use std::rc::Rc;
     use classfile_reader::{get_class, io};
     use classfile_reader::class::Value;
     use classfile_reader::vm::Vm;
@@ -30,7 +31,7 @@ mod test {
     #[test]
     fn get_constant_foat() {
         let class = get_class(io::read_class_file("tests/Float.class")).unwrap();
-        Vm::new().new_instance(&class);
+        Vm::new().new_instance(Rc::new(class));
         // assert_eq!((55, 0), class.get_version());
         // if let Value::F32(v) = Vm::new().execute(class.methods.get("public static getF()F").unwrap()).unwrap() {
         //     assert_eq!(v, 42.0);
