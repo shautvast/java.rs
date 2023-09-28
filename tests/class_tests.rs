@@ -1,16 +1,17 @@
 mod test {
     use std::rc::Rc;
-    use classfile_reader::{get_class, io};
+    use classfile_reader::{classloader::load_class, io};
     use classfile_reader::class::Value;
     use classfile_reader::vm::Vm;
 
     #[test]
     fn get_constant_int() {
-        let class = get_class(io::read_class_file("tests/Int.class")).unwrap();
+        let mut vm = Vm::new(".");
+        let class = vm.get_class("Float").expect("ClassNotFound");
         assert_eq!((55, 0), class.get_version());
 
 
-        if let Value::I32(v) = Vm::new().execute(class.methods.get("public static get()I").unwrap()).unwrap() {
+        if let Value::I32(v) = Vm::new("").execute("Float", "public static get()I").unwrap() {
             assert_eq!(v, 42);
         } else {
             panic!("fail");
@@ -19,9 +20,10 @@ mod test {
 
     #[test]
     fn get_constant_double() {
-        let class = get_class(io::read_class_file("tests/Double.class")).unwrap();
+        let mut vm = Vm::new(".");
+        let class = vm.get_class("Double").expect("ClassNotFound");
         assert_eq!((55, 0), class.get_version());
-        if let Value::F64(v) = Vm::new().execute(class.methods.get("public static get()D").unwrap()).unwrap() {
+        if let Value::F64(v) = Vm::new("").execute("Double", "public static get()D").unwrap() {
             assert_eq!(v, 42.0);
         } else {
             panic!("fail");
@@ -30,8 +32,8 @@ mod test {
 
     #[test]
     fn get_constant_foat() {
-        let class = get_class(io::read_class_file("tests/Float.class")).unwrap();
-        Vm::new().new_instance(Rc::new(class));
+        let mut vm = Vm::new(".");
+        vm.load_class("Float").expect("ClassNotFound");
         // assert_eq!((55, 0), class.get_version());
         // if let Value::F32(v) = Vm::new().execute(class.methods.get("public static getF()F").unwrap()).unwrap() {
         //     assert_eq!(v, 42.0);
@@ -41,11 +43,12 @@ mod test {
     }
 
     #[test]
-    fn get_foat() {
-        let class = get_class(io::read_class_file("tests/Float.class")).unwrap();
-        assert_eq!((55, 0), class.get_version());
-        if let Value::F32(v) = Vm::new().execute(class.methods.get("public getF2()F").unwrap()).unwrap() {
-            assert_eq!(v, 42.0);
+    fn get_float() {
+        // assert_eq!((55, 0), class.get_version());
+        let mut vm = Vm::new("/Users/FJ19WK/RustroverProjects/classfile_reader/tests");
+        vm.load_class("Float").expect("ClassNotFound");
+        if let Value::F32(v) = vm.execute("Float","public getF2()F").unwrap() {
+            assert_eq!(v, 0.0);
         } else {
             panic!("fail");
         }

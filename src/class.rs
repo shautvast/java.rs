@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use crate::classloader::CpEntry;
 
-use crate::CpEntry;
 use crate::io::read_u16;
 
 #[derive(Debug)]
@@ -30,7 +30,9 @@ impl Class {
     //     execute(m).unwrap() //TODO
     // }
 
-
+    pub fn get_method(&self, name: &str) -> &Method {
+        self.methods.get(name).expect("ClassNountFoundException")
+    }
 }
 
 pub struct Method {
@@ -209,15 +211,15 @@ impl MethodCode {
     }
 }
 
-
-
 #[derive(Debug)]
 pub enum Value {
     Void,
+    Null,
+    // the $1_000_000 mistake
     I32(i32),
     I64(i64),
     F32(f32),
     F64(f64),
     BOOL(bool),
-    CHAR(char)
+    CHAR(char),
 }

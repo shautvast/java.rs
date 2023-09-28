@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use anyhow::Error;
 use crate::io::{read_f32, read_f64, read_i32, read_i64, read_u16, read_u32};
 use crate::class::{AttributeType, Class, MethodCode, Exception, Field, Method};
 
-pub fn load_class(bytecode: Vec<u8>) -> Option<Class> {
+pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     check_magic(&bytecode);
 
     let constant_pool_count = read_u16(&bytecode, 8);
@@ -59,7 +60,7 @@ pub fn load_class(bytecode: Vec<u8>) -> Option<Class> {
         }
     }
 
-    Some(Class {
+    Ok(Class {
         minor_version: read_u16(&bytecode, 4),
         major_version: read_u16(&bytecode, 6),
         constant_pool,

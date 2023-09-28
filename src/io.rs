@@ -1,5 +1,6 @@
 use std::fs::{self, File};
 use std::io::Read;
+use anyhow::{anyhow, Error};
 
 pub(crate) fn read_u8(data: &[u8], pos: usize) -> u8 {
     u8::from_be_bytes(data[pos..pos + 1].try_into().expect("slice with incorrect length"))
@@ -29,10 +30,24 @@ pub(crate) fn read_f64(data: &[u8], pos: usize) -> f64 {
     f64::from_be_bytes(data[pos..pos + 8].try_into().expect("slice with incorrect length"))
 }
 
-pub fn read_class_file(name: &str) -> Vec<u8> {
-    let mut f = File::open(name).expect("no file found");
-    let metadata = fs::metadata(name).expect("unable to read metadata");
+pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, Error> {
+    for clp_entry in classpath {
+        let mut maybe_path = clp_entry.clone();
+        maybe_path.push_str("/");
+        maybe_path.push_str(class_name);
+        maybe_path.push_str(".class");
+        println!("{}", maybe_path);
+        if fs::metadata(&maybe_path)?.is_file() {
+            return Ok(maybe_path);
+        }
+    }
+    return Err(anyhow!("Class not found {}", class_name));
+}
+
+pub fn read_class_file(name: String) -> Result<Vec<u8>, Error> {
+    let mut f = File::open(&name)?;
+    let metadata = fs::metadata(&name)?;
     let mut buffer = vec![0; metadata.len() as usize];
-    let _ = f.read(&mut buffer).expect("buffer overflow");
-    buffer
+    let _ = f.read(&mut buffer)?;
+    Ok(buffer)
 }

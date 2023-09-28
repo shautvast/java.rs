@@ -85,6 +85,7 @@ pub const FRETURN: u8 = 174; // (0xae) Return float from method
 pub const DRETURN: u8 = 175; // (0xaf) Return double from method
 // pub const areturn: u8 = 176; //(0xb0) return reference
 // pub const return_v: u8 = 177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
+pub const GETFIELD: u8 = 180; // (0xb4) Fetch field from object3
 pub const NEW: u8 = 187; // (0xbb) Create new object
 // pub const invokevirtual: u8 = 182; // (0xb6) Invoke instance method; dispatch based on class
 //
