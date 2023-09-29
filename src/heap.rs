@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use crate::class::{Class, Value};
 
-pub(crate) struct Object {
+#[derive(Debug)]
+pub struct Object {
     // locked: bool,
     // hashcode: i32,
-    class: Rc<Class>,
-    data: HashMap<u16, Value>, //TODO optimize
+    class: Arc<Class>,
+    pub data: HashMap<u16, Arc<Value>>, //TODO optimize
 }
 
 impl Object {
-    pub fn new(class: Rc<Class>, data: HashMap<u16, Value>) -> Self {
+    pub fn new(class: Arc<Class>, data: HashMap<u16, Arc<Value>>) -> Self {
         Self {
             class,
             data,
@@ -19,7 +21,7 @@ impl Object {
 }
 
 pub(crate) struct Heap {
-    objects: Vec<Object>,
+    objects: Vec<Arc<Object>>,
 }
 
 impl Heap {
@@ -29,7 +31,7 @@ impl Heap {
         }
     }
 
-    pub(crate) fn new_object(&mut self, object: Object) {
+    pub(crate) fn new_object(&mut self, object: Arc<Object>) {
         self.objects.push(object);
     }
 }

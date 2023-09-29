@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 use crate::classloader::CpEntry;
+use crate::heap::Object;
 
 use crate::io::read_u16;
 
@@ -222,4 +224,5 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
+    Ref(Arc<Object>)
 }

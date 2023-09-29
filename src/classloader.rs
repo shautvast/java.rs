@@ -143,8 +143,8 @@ fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u
             CpEntry::InterfaceMethodref(class_index, name_and_type_index)
         }
         12 => {
-            let name_index = read_u16(bytecode, *index + 1) as usize;
-            let descriptor_index = read_u16(bytecode, *index + 3) as usize;
+            let name_index = read_u16(bytecode, *index + 1);
+            let descriptor_index = read_u16(bytecode, *index + 3);
             *index += 5;
             CpEntry::NameAndType(name_index, descriptor_index)
         }
@@ -264,6 +264,6 @@ pub enum CpEntry {
     Fieldref(u16, u16),
     MethodRef(u16, u16),
     InterfaceMethodref(u16, u16),
-    NameAndType(usize, usize),
+    NameAndType(u16, u16),
 }
 
