@@ -86,7 +86,7 @@ impl Vm {
                 pc += 1;
                 println!("{}", opcode);
                 match opcode {
-                    &opcodes::BIPUSH => {
+                    opcodes::BIPUSH => {
                         let c = code.opcodes[pc] as i32;
                         stack.push(Arc::new(Value::I32(c)));
                         pc += 1;
@@ -151,10 +151,10 @@ impl Vm {
                     &opcodes::GETFIELD => {
                         let cp_index = read_u16(&code.opcodes, pc);
                         if let CpEntry::Fieldref(class_index, name_and_type_index) = method.constant_pool.get(&cp_index).unwrap() {
-                            if let Value::Ref(inst) = &*stack.pop()? {
+                            if let Value::Ref(inst) = &*stack.pop()? { //TODO smell?
                                 if let CpEntry::NameAndType(name, _) = method.constant_pool.get(name_and_type_index).unwrap() {
                                     let value = inst.data.get(&name).unwrap();
-                                    println!("{:?}", value);
+                                    // println!("{:?}", value);
                                     stack.push(value.clone());
                                 }
                             }

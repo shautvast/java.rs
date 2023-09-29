@@ -4,7 +4,8 @@
 // pub const fconst_2: u8 = 13; // (0xd) Push float 2
 // pub const dconst_0:u8 = 14; // (0xe) push double 0
 // pub const dconst_1:u8 = 15; // (0xf) push double 1
-pub const BIPUSH:u8 = 16; // (0x10) Push byte
+// TODO turn all into references
+pub const BIPUSH: &u8 = &16; // (0x10) Push byte
 pub const LDC: u8 = 18; // (0x12) Push item from run-time pub constant pool
 pub const LDC_W: u8 = 19; // (0x13) Push item from run-time constant pool (wide index)
 pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant pool (wide index)
