@@ -6,9 +6,9 @@
 // pub const dconst_1:u8 = 15; // (0xf) push double 1
 // TODO turn all into references
 pub const BIPUSH: &u8 = &16; // (0x10) Push byte
-pub const LDC: u8 = 18; // (0x12) Push item from run-time pub constant pool
-pub const LDC_W: u8 = 19; // (0x13) Push item from run-time constant pool (wide index)
-pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant pool (wide index)
+pub const LDC: &u8 = &18; // (0x12) Push item from run-time pub constant pool
+pub const LDC_W: &u8 = &19; // (0x13) Push item from run-time constant pool (wide index)
+pub const LDC2_W: &u8 = &20; // (0x14) Push long or double from run-time constant pool (wide index)
 // pub const fload:u8 = 23; // (0x17) Load float from local variable
 // pub const dload:u8 = 24; // (0x18) load double from local variable
 // pub const aload:u8 = 25; //0x19
@@ -21,7 +21,7 @@ pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant 
 // pub const dload_1:u8 = 39; //  (0x27) Load double 1 from local variable
 // pub const dload_2:u8 = 40; //  (0x28) Load double 2 from local variable
 // pub const dload_3:u8 = 41; // (0x29) Load double 3 from local variable
-pub const ALOAD_0:u8 = 42;// (0x2a)
+pub const ALOAD_0:&u8 = &42;// (0x2a)
 // pub const aload_1:u8 = 43;// (0x2a)
 // pub const aload_2:u8 = 44;// (0x2b)
 // pub const aload_3:u8 = 45;// (0x2c)
@@ -81,13 +81,13 @@ pub const ALOAD_0:u8 = 42;// (0x2a)
 // pub const dcmpl:u8 = 151; // (0x97) compare double (less than)
 // pub const dcmpg:u8 = 152; // (0x98) compare double (greater than)
 //
-pub const IRETURN: u8 = 172; // (0xac) ireturn
-pub const FRETURN: u8 = 174; // (0xae) Return float from method
-pub const DRETURN: u8 = 175; // (0xaf) Return double from method
+pub const IRETURN: &u8 = &172; // (0xac) ireturn
+pub const FRETURN: &u8 = &174; // (0xae) Return float from method
+pub const DRETURN: &u8 = &175; // (0xaf) Return double from method
 // pub const areturn: u8 = 176; //(0xb0) return reference
 // pub const return_v: u8 = 177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
-pub const GETFIELD: u8 = 180; // (0xb4) Fetch field from object3
-pub const NEW: u8 = 187; // (0xbb) Create new object
+pub const GETFIELD: &u8 = &180; // (0xb4) Fetch field from object3
+pub const NEW: &u8 = &187; // (0xbb) Create new object
 // pub const invokevirtual: u8 = 182; // (0xb6) Invoke instance method; dispatch based on class
 //
 // pub const getstatic: u8 = 178; // (0xb2) Get static field from class

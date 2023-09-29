@@ -36,7 +36,8 @@ impl Class {
         self.methods.get(name).expect("ClassNountFoundException")
     }
 }
-
+unsafe impl Send for Class {}
+unsafe impl Sync for Class {}
 pub struct Method {
     pub(crate) constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,
@@ -96,7 +97,7 @@ impl Field {
                name_index: u16,
                descriptor_index: u16,
                attributes: HashMap<String, AttributeType>, ) -> Self {
-        Field { constant_pool, access_flags, name_index, descriptor_index, attributes: attributes }
+        Field { constant_pool, access_flags, name_index, descriptor_index, attributes }
     }
 
     pub fn name(&self) -> String {
@@ -197,19 +198,19 @@ impl Exception {
 
 #[derive(Debug)]
 pub struct MethodCode {
-    max_stack: u16,
-    max_locals: u16,
+    _max_stack: u16,
+    _max_locals: u16,
     pub(crate) opcodes: Vec<u8>,
-    exception_table: Vec<Exception>,
-    code_attributes: HashMap<String, AttributeType>,
+    _exception_table: Vec<Exception>,
+    _code_attributes: HashMap<String, AttributeType>,
 }
 
 impl MethodCode {
-    pub(crate) fn new(max_stack: u16, max_locals: u16,
+    pub(crate) fn new(_max_stack: u16, _max_locals: u16,
                       code: Vec<u8>,
-                      exception_table: Vec<Exception>,
-                      code_attributes: HashMap<String, AttributeType>) -> Self {
-        Self { max_stack, max_locals, opcodes: code, exception_table, code_attributes }
+                      _exception_table: Vec<Exception>,
+                      _code_attributes: HashMap<String, AttributeType>) -> Self {
+        Self { _max_stack, _max_locals, opcodes: code, _exception_table, _code_attributes }
     }
 }
 
@@ -224,5 +225,8 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
-    Ref(Arc<Object>)
+    Ref(Arc<Object>),
 }
+
+unsafe impl Send for Value {}
+unsafe impl Sync for Value {}

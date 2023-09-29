@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use crate::class::{Class, Value};
 
@@ -7,14 +6,17 @@ use crate::class::{Class, Value};
 pub struct Object {
     // locked: bool,
     // hashcode: i32,
-    class: Arc<Class>,
+    _class: Arc<Class>,
     pub data: HashMap<u16, Arc<Value>>, //TODO optimize
 }
 
+unsafe impl Send for Object {}
+unsafe impl Sync for Object {}
+
 impl Object {
-    pub fn new(class: Arc<Class>, data: HashMap<u16, Arc<Value>>) -> Self {
+    pub fn new(_class: Arc<Class>, data: HashMap<u16, Arc<Value>>) -> Self {
         Self {
-            class,
+            _class,
             data,
         }
     }
