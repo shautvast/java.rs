@@ -4,10 +4,10 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 
 use crate::class::{AttributeType, Class, Value};
-use crate::classloader::{CpEntry, load_class};
+use crate::classloader::{load_class, CpEntry};
 use crate::heap::{Heap, Object};
 use crate::io::*;
-use crate::opcodes;
+use crate::opcodes::*;
 
 struct StackFrame {
     data: Vec<Arc<Value>>,
@@ -15,9 +15,7 @@ struct StackFrame {
 
 impl StackFrame {
     fn new() -> Self {
-        Self {
-            data: vec![]
-        }
+        Self { data: vec![] }
     }
 
     fn push(&mut self, val: Arc<Value>) {
@@ -57,7 +55,6 @@ impl Vm {
         Ok(entry.clone())
     }
 
-
     pub fn new_instance(&self, class: Arc<Class>) -> Object {
         let mut data = HashMap::new();
         for f in &class.fields {
@@ -70,14 +67,19 @@ impl Vm {
                 "F" => Value::F32(0.0),
                 "D" => Value::F64(0.0),
                 "L" => Value::Null,
-                _ => Value::Void
+                _ => Value::Void,
             };
             data.insert(f.name_index, Arc::new(value));
         }
         Object::new(class.clone(), data)
     }
 
-    pub fn execute(&mut self, class_name: &str, method_name: &str, instance: Option<Arc<Object>>) -> Result<Arc<Value>, Error> {
+    pub fn execute(
+        &mut self,
+        class_name: &str,
+        method_name: &str,
+        instance: Option<Arc<Object>>,
+    ) -> Result<Arc<Value>, Error> {
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
@@ -86,14 +88,14 @@ impl Vm {
             while pc < code.opcodes.len() {
                 let opcode = &code.opcodes[pc];
                 pc += 1;
-                println!("{}", opcode);
+                println!("opcode {}", opcode);
                 match opcode {
-                    opcodes::BIPUSH => {
+                    BIPUSH => {
                         let c = code.opcodes[pc] as i32;
                         stack.push(Arc::new(Value::I32(c)));
                         pc += 1;
                     }
-                    opcodes::LDC => {
+                    LDC => {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
@@ -106,7 +108,7 @@ impl Vm {
                         }
                         pc += 1;
                     }
-                    opcodes::LDC_W => {
+                    LDC_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
@@ -115,11 +117,13 @@ impl Vm {
                             CpEntry::Float(f) => {
                                 stack.push(Arc::new(Value::F32(*f)));
                             }
-                            _ => { panic!("unexpected") }
+                            _ => {
+                                panic!("unexpected")
+                            }
                         }
                         pc += 2;
                     }
-                    opcodes::LDC2_W => {
+                    LDC2_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
@@ -128,33 +132,46 @@ impl Vm {
                             CpEntry::Long(l) => {
                                 stack.push(Arc::new(Value::I64(*l)));
                             }
-                            _ => { panic!("unexpected") }
+                            _ => {
+                                panic!("unexpected")
+                            }
                         }
 
                         pc += 2;
                     }
-                    opcodes::ALOAD_0 => {
-                        match instance.clone() {
-                            Some(r) => {
-                                stack.push(Arc::new(Value::Ref(r)));
-                            }
-                            None => { panic!("static context") }
+                    ALOAD_0 => match instance.clone() {
+                        Some(r) => {
+                            stack.push(Arc::new(Value::Ref(r)));
                         }
+                        None => {
+                            panic!("static context")
+                        }
+                    },
+                    DUP => {
+                        println!("DUP");
+                        let value = stack.pop().expect("Stack empty");
+                        stack.push(value.clone());
+                        stack.push(value);
                     }
-                    opcodes::IRETURN => {
+                    IRETURN => {
                         return stack.pop();
                     }
-                    opcodes::DRETURN => {
+                    DRETURN => {
                         return stack.pop();
                     }
-                    opcodes::FRETURN => {
+                    FRETURN => {
                         return stack.pop();
                     }
-                    opcodes::GETFIELD => {
+                    GETFIELD => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let CpEntry::Fieldref(_class_index, name_and_type_index) = method.constant_pool.get(&cp_index).unwrap() {
-                            if let Value::Ref(inst) = &*stack.pop()? { //TODO smell?
-                                if let CpEntry::NameAndType(name, _) = method.constant_pool.get(name_and_type_index).unwrap() {
+                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
+                            method.constant_pool.get(&cp_index).unwrap()
+                        {
+                            if let Value::Ref(inst) = &*stack.pop()? {
+                                //TODO smell?
+                                if let CpEntry::NameAndType(name, _) =
+                                    method.constant_pool.get(name_and_type_index).unwrap()
+                                {
                                     let value = inst.data.get(name).unwrap();
                                     // println!("{:?}", value);
                                     stack.push(value.clone());
@@ -163,19 +180,34 @@ impl Vm {
                         }
                         pc += 2;
                     }
-                    opcodes::NEW => {
+                    INVOKESPECIAL => {
+                        let ref_index = read_u16(&code.opcodes, pc);
+                        if let CpEntry::MethodRef(_class_index, name_and_type_index) =
+                            method.constant_pool.get(&ref_index).unwrap()
+                        {}
+                        pc += 2;
+                    }
+                    NEW => {
+                        println!("new");
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let CpEntry::ClassRef(class_name_index) = method.constant_pool.get(&cp_index).unwrap() {
-                            if let CpEntry::Utf8(_) = method.constant_pool.get(class_name_index).unwrap() {
+                        if let CpEntry::ClassRef(class_name_index) =
+                            method.constant_pool.get(&cp_index).unwrap()
+                        {
+                            if let CpEntry::Utf8(_) =
+                                method.constant_pool.get(class_name_index).unwrap()
+                            {
                                 let class = self.get_class(class_name)?;
                                 let object = Arc::new(self.new_instance(class));
                                 stack.push(Arc::new(Value::Ref(object.clone())));
                                 self.heap.new_object(object);
                             }
                         }
+                        pc += 2;
                     }
                     //TODO implement all opcodes
-                    _ => { panic!("opcode not implemented") }
+                    _ => {
+                        panic!("opcode not implemented")
+                    }
                 }
             }
         }

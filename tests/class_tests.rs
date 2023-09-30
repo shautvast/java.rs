@@ -1,9 +1,9 @@
 mod test {
-    use std::rc::Rc;
-    use std::sync::Arc;
-    use classfile_reader::{classloader::load_class, io};
     use classfile_reader::class::Value;
     use classfile_reader::vm::Vm;
+    use classfile_reader::{classloader::load_class, io};
+    use std::rc::Rc;
+    use std::sync::Arc;
 
     #[test]
     fn get_constant_int() {
@@ -47,11 +47,14 @@ mod test {
     fn get_float() {
         // assert_eq!((55, 0), class.get_version());
 
-        let mut vm = Vm::new("/Users/FJ19WK/RustroverProjects/classfile_reader/tests");
+        let mut vm = Vm::new("/Users/FJ19WK/RustroverProjects/java_rs/tests");
 
         let c = vm.get_class("Float").unwrap();
         let object = Arc::new(vm.new_instance(c));
-        if let Value::F32(v) = *vm.execute("Float","public getF2()F", Some(object)).unwrap() {
+        if let Value::F32(v) = *vm
+            .execute("Float", "public getF2()F", Some(object))
+            .unwrap()
+        {
             assert_eq!(v, 0.0);
         } else {
             panic!("fail");

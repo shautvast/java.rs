@@ -1,7 +1,6 @@
 pub mod class;
+pub mod classloader;
+mod heap;
 pub mod io;
 pub mod opcodes;
 pub mod vm;
-mod heap;
-pub mod classloader;
-

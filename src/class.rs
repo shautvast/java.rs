@@ -1,10 +1,10 @@
+use crate::classloader::CpEntry;
+use crate::heap::Object;
+use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use anyhow::{anyhow, Error};
-use crate::classloader::CpEntry;
-use crate::heap::Object;
 
 use crate::io::read_u16;
 
@@ -29,7 +29,9 @@ impl Class {
     }
 
     pub fn get_method(&self, name: &str) -> Result<&Method, Error> {
-        self.methods.get(name).ok_or(anyhow!("Method {} not found", name))
+        self.methods
+            .get(name)
+            .ok_or(anyhow!("Method {} not found", name))
     }
 }
 unsafe impl Send for Class {}
@@ -44,18 +46,29 @@ pub struct Method {
 
 impl fmt::Debug for Method {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Method {{access_flags: {}, name_index: {}, descriptor_index: {}, attributes: {:?} }}",
-               self.access_flags, self.name_index, self.descriptor_index, self.attributes)
+        write!(
+            f,
+            "Method {{access_flags: {}, name_index: {}, descriptor_index: {}, attributes: {:?} }}",
+            self.access_flags, self.name_index, self.descriptor_index, self.attributes
+        )
     }
 }
 
 impl Method {
-    pub fn new(constant_pool: Rc<HashMap<u16, CpEntry>>,
-               access_flags: u16,
-               name_index: u16,
-               descriptor_index: u16,
-               attributes: HashMap<String, AttributeType>, ) -> Self {
-        Method { constant_pool, access_flags, name_index, descriptor_index, attributes }
+    pub fn new(
+        constant_pool: Rc<HashMap<u16, CpEntry>>,
+        access_flags: u16,
+        name_index: u16,
+        descriptor_index: u16,
+        attributes: HashMap<String, AttributeType>,
+    ) -> Self {
+        Method {
+            constant_pool,
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes,
+        }
     }
 
     pub fn name(&self) -> String {
@@ -66,7 +79,6 @@ impl Method {
         if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             full_name.push_str(s);
         }
-
 
         full_name
     }
@@ -82,18 +94,29 @@ pub struct Field {
 
 impl fmt::Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Field {{access_flags: {}, name_index: {}, descriptor_index: {}, attributes: {:?} }}",
-               self.access_flags, self.name_index, self.descriptor_index, self.attributes)
+        write!(
+            f,
+            "Field {{access_flags: {}, name_index: {}, descriptor_index: {}, attributes: {:?} }}",
+            self.access_flags, self.name_index, self.descriptor_index, self.attributes
+        )
     }
 }
 
 impl Field {
-    pub fn new(constant_pool: Rc<HashMap<u16, CpEntry>>,
-               access_flags: u16,
-               name_index: u16,
-               descriptor_index: u16,
-               attributes: HashMap<String, AttributeType>, ) -> Self {
-        Field { constant_pool, access_flags, name_index, descriptor_index, attributes }
+    pub fn new(
+        constant_pool: Rc<HashMap<u16, CpEntry>>,
+        access_flags: u16,
+        name_index: u16,
+        descriptor_index: u16,
+        attributes: HashMap<String, AttributeType>,
+    ) -> Self {
+        Field {
+            constant_pool,
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes,
+        }
     }
 
     pub fn name(&self) -> String {
@@ -128,16 +151,18 @@ const MODIFIERS: [(u16, &str); 12] = [
     (0x0100, "native "),
     (0x0200, "interface "),
     (0x0400, "interface "),
-    (0x0800, "strict ")];
+    (0x0800, "strict "),
+];
 
 pub fn get_modifier(modifier: u16) -> String {
     let mut output = String::new();
     for m in MODIFIERS {
-        if modifier & m.0 == m.0 { output.push_str(m.1) }
+        if modifier & m.0 == m.0 {
+            output.push_str(m.1)
+        }
     }
     output
 }
-
 
 #[derive(Debug)]
 pub enum AttributeType {
@@ -202,11 +227,20 @@ pub struct MethodCode {
 }
 
 impl MethodCode {
-    pub(crate) fn new(_max_stack: u16, _max_locals: u16,
-                      code: Vec<u8>,
-                      _exception_table: Vec<Exception>,
-                      _code_attributes: HashMap<String, AttributeType>) -> Self {
-        Self { _max_stack, _max_locals, opcodes: code, _exception_table, _code_attributes }
+    pub(crate) fn new(
+        _max_stack: u16,
+        _max_locals: u16,
+        code: Vec<u8>,
+        _exception_table: Vec<Exception>,
+        _code_attributes: HashMap<String, AttributeType>,
+    ) -> Self {
+        Self {
+            _max_stack,
+            _max_locals,
+            opcodes: code,
+            _exception_table,
+            _code_attributes,
+        }
     }
 }
 
