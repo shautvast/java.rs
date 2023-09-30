@@ -1,15 +1,10 @@
-use regex::Regex;
+use std::io::Error;
+use classfile_reader::vm::Vm;
 
-fn main() {
-    // if let Some(class) = classfile_reader::get_class(classfile_reader::io::read_class_file("./Dummy.class")){
-    //     println!("{:?}", class);
-    //     let ret = class.execute("public static get()D");
-    //     println!("{:?}", ret);
-    // }
-
-    let pattern = Regex::new(".*/(.+)").unwrap();
-    let c = pattern.captures("java/lang/String").unwrap().get(1);
-    println!("{}", c.unwrap().as_str());
+fn main() -> Result<(), Error> {
+    let mut vm = Vm::new("tests");
+    vm.execute("Main","public static main([Ljava/lang/String;)V", None).unwrap();
+    Ok(())
 }
 
 

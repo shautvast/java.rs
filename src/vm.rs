@@ -34,6 +34,7 @@ pub struct Vm {
     classes: HashMap<String, Arc<Class>>,
     //TODO implement classloader
     heap: Heap,
+    pub exitcode: i32,
 }
 
 impl Vm {
@@ -42,13 +43,14 @@ impl Vm {
             classpath: classpath.split(':').map(|s| s.to_owned()).collect(),
             classes: HashMap::new(),
             heap: Heap::new(),
+            exitcode: 0,
         }
     }
 
     pub fn get_class(&mut self, class_name: &str) -> Result<Arc<Class>, Error> {
         let entry = self.classes.entry(class_name.into());
         let entry = entry.or_insert_with(|| {
-            let resolved_path = find_class(&self.classpath, class_name).unwrap();
+            let resolved_path = find_class(&self.classpath, class_name).expect("Class not found");
             let bytecode = read_class_file(resolved_path).unwrap();
             Arc::new(load_class(bytecode).unwrap())
         });
@@ -77,7 +79,7 @@ impl Vm {
 
     pub fn execute(&mut self, class_name: &str, method_name: &str, instance: Option<Arc<Object>>) -> Result<Arc<Value>, Error> {
         let class = self.get_class(class_name)?;
-        let method = class.get_method(method_name);
+        let method = class.get_method(method_name)?;
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
             let mut stack = StackFrame::new();
             let mut pc: usize = 0;

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
+use anyhow::{anyhow, Error};
 use crate::classloader::CpEntry;
 use crate::heap::Object;
 
@@ -27,13 +28,8 @@ impl Class {
         (self.major_version, self.minor_version)
     }
 
-    // pub fn execute(&self, method_name: &str) -> Value {
-    //     let m = self.methods.get(method_name).unwrap();
-    //     execute(m).unwrap() //TODO
-    // }
-
-    pub fn get_method(&self, name: &str) -> &Method {
-        self.methods.get(name).expect("ClassNountFoundException")
+    pub fn get_method(&self, name: &str) -> Result<&Method, Error> {
+        self.methods.get(name).ok_or(anyhow!("Method {} not found", name))
     }
 }
 unsafe impl Send for Class {}
