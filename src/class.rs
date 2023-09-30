@@ -33,9 +33,19 @@ impl Class {
             .get(name)
             .ok_or(anyhow!("Method {} not found", name))
     }
+
+    pub fn get_name(&self) -> &str {
+        if let CpEntry::ClassRef(name_index ) = self.constant_pool.get(&self.this_class).unwrap(){
+            if let CpEntry::Utf8(name) = self.constant_pool.get(name_index).unwrap(){
+                return name;
+            }
+        }
+        panic!();
+    }
 }
 unsafe impl Send for Class {}
 unsafe impl Sync for Class {}
+
 pub struct Method {
     pub(crate) constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,

@@ -51,6 +51,7 @@ pub const ALOAD_0: &u8 = &42; // (0x2a)
 // pub const bastore:u8 = 84; // (0x54)
 //
 // pub const castore:u8 = 85; // (0x55)
+pub const POP: &u8 = &87; // (0x57) Pop the top operand stack value
 pub const DUP: &u8 = &89; // (0x59) duplicate the top operand stack value
 // pub const dup_x1: u8 = 90; // (0x5a) Duplicate the top operand stack value and insert two values down
 // pub const dup_x2: u8 = 91; // (0x5b) Duplicate the top operand stack value and insert two or three values down

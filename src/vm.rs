@@ -63,9 +63,9 @@ impl Vm {
         println!("get_class {}", class_name);
         let entry = self.classes.entry(class_name.into());
         let entry = entry.or_insert_with(|| {
-            print!("read class {} ", class_name);
+            // print!("read class {} ", class_name);
             let resolved_path = find_class(&self.classpath, class_name).expect("Class not found");
-            println!("full path {}", resolved_path);
+            // println!("full path {}", resolved_path);
             let bytecode = read_bytecode(resolved_path).unwrap();
             Arc::new(load_class(bytecode).unwrap())
         });
@@ -171,26 +171,35 @@ impl Vm {
                             }
                         }
                     }
+                    POP =>{
+                        self.local_stack().pop().expect("Stack empty");
+                    }
                     DUP => {
                         println!("DUP");
                         let value = self.local_stack().pop().expect("Stack empty");
+                        println!("{:?}", value);
                         self.local_stack().push(value.clone());
                         self.local_stack().push(value);
                     }
                     IRETURN => {
+                        println!("return I");
                         return self.local_stack().pop();
                     }
                     DRETURN => {
+                        println!("return D");
                         return self.local_stack().pop();
                     }
                     FRETURN => {
+                        println!("return F");
                         return self.local_stack().pop();
                     }
                     RETURN_VOID => {
+                        println!("return");
                         self.stack.pop();
-                        return Ok(Arc::new(Void))
+                        return Ok(Arc::new(Void));
                     }
                     GETFIELD => {
+                        println!("GETFIELD");
                         let cp_index = read_u16(&code.opcodes, pc);
                         if let CpEntry::Fieldref(_class_index, name_and_type_index) =
                             method.constant_pool.get(&cp_index).unwrap()
@@ -201,22 +210,34 @@ impl Vm {
                                     method.constant_pool.get(name_and_type_index).unwrap()
                                 {
                                     let value = inst.data.get(name).unwrap();
-                                    // println!("{:?}", value);
+                                    println!("{:?}", value);
                                     self.local_stack().push(value.clone());
                                 }
                             }
                         }
                         pc += 2;
                     }
-                    INVOKEVIRTUAL =>{
-                        //TODO implement
+                    INVOKEVIRTUAL => {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        let instance = self.local_stack().pop().unwrap();
+                        if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                            let return_value = self.execute(class.as_str(), method.as_str(), Some(instance))?;
+                            if let Void = *return_value {} else { // not let?
+                                self.local_stack().push(return_value);
+                            }
+                        }
+
+                        pc += 2;
                     }
                     INVOKESPECIAL => {
                         println!("INVOKESPECIAL");
                         let cp_index = read_u16(&code.opcodes, pc);
                         let instance = self.local_stack().pop().unwrap();
                         if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            self.execute(class.as_str(), method.as_str(), Some(instance));
+                            let return_value = self.execute(class.as_str(), method.as_str(), Some(instance))?;
+                            if let Void = *return_value {} else { // not let?
+                                self.local_stack().push(return_value);
+                            }
                         }
 
                         pc += 2;
