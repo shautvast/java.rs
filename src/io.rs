@@ -17,7 +17,7 @@ pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, E
     }
 
     for clp_entry in classpath {
-        if fs::metadata(&clp_entry)?.is_dir() {
+        if fs::metadata(clp_entry)?.is_dir() {
             let mut maybe_path = clp_entry.clone();
             maybe_path.push('/');
             maybe_path.push_str(class_name);
@@ -37,18 +37,18 @@ pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, E
 /// and returns the byte array as Vec
 pub fn read_bytecode(name: String) -> Result<Vec<u8>, Error> {
     let mut buffer;
-    if name.contains("#") {
-        let parts: Vec<&str> = name.split("#").collect();
+    if name.contains('#') {
+        let parts: Vec<&str> = name.split('#').collect();
         let archive_file = File::open(parts[0])?;
         let mut archive_zip = zip::ZipArchive::new(archive_file)?;
         let mut entry = archive_zip.by_name(parts[1])?;
         buffer = vec![0; entry.size() as usize];
-        entry.read(&mut buffer)?;
+        entry.read_exact(&mut buffer)?;
     } else {
         let mut f = File::open(&name)?;
         let metadata = fs::metadata(&name)?;
         buffer = vec![0; metadata.len() as usize];
-        let _ = f.read(&mut buffer)?;
+        f.read_exact(&mut buffer)?;
     }
     Ok(buffer)
 }

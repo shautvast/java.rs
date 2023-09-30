@@ -21,7 +21,7 @@ impl Object {
     }
 
     fn get_field(&self, cp_index: &u16) -> &str {
-        if let CpEntry::Utf8(name) = self.class.constant_pool.get(&cp_index).unwrap() {
+        if let CpEntry::Utf8(name) = self.class.constant_pool.get(cp_index).unwrap() {
             return name;
         }
         panic!()

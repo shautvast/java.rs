@@ -276,8 +276,8 @@ impl Vm {
 fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, String)> {
     if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
-            if let CpEntry::ClassRef(class_name_index) = cp.get(&class_index).unwrap() {
-                if let CpEntry::Utf8(class_name) = cp.get(&class_name_index).unwrap() {
+            if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
+                if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
                     return Some((class_name.into(), method_signature));
                 }
             }
@@ -286,10 +286,10 @@ fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option
     None
 }
 
-fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String)> {
+fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<String> {
     if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
-        if let CpEntry::Utf8(method_name) = cp.get(&method_name_index).unwrap() {
-            if let CpEntry::Utf8(signature) = cp.get(&signature_index).unwrap() {
+        if let CpEntry::Utf8(method_name) = cp.get(method_name_index).unwrap() {
+            if let CpEntry::Utf8(signature) = cp.get(signature_index).unwrap() {
                 let mut method_signature: String = method_name.into();
                 method_signature.push_str(signature);
                 return Some(method_signature);
