@@ -3,7 +3,7 @@
 _as in why not???_
 
 actually:
-`System.out.println("Hello World")` would actually be a major achievement. It's nowhere near that level...
+`System.out.println("Hello World")` would be a major achievement. It's nowhere near that level...
 
 **so far**
 * starts a main class (TODO cmdline args)
