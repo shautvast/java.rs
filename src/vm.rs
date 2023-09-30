@@ -73,6 +73,7 @@ impl Vm {
     }
 
     pub fn new_instance(&self, class: Arc<Class>) -> Object {
+        //TODO add fields from superclasses
         let mut data = HashMap::new();
         for f in &class.fields {
             let value = match f.type_of().as_str() {
@@ -263,11 +264,12 @@ impl Vm {
                     //TODO implement all opcodes
                     _ => {
                         panic!("opcode not implemented {:?}", self.stack)
+                        //TODO implement proper stacktraces
                     }
                 }
             }
         }
-        Err(anyhow!("should not happen"))
+        panic!("should not happen")
     }
 }
 
