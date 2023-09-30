@@ -72,7 +72,7 @@ impl Method {
     }
 
     pub fn name(&self) -> String {
-        let mut full_name = get_modifier(self.access_flags);
+        let mut full_name = String::new();
         if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.name_index).unwrap() {
             full_name.push_str(s);
         }
@@ -131,7 +131,6 @@ impl Field {
     }
 
     pub fn type_of(&self) -> &String {
-        println!("{}", self.name_index);
         if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.descriptor_index).unwrap() {
             return s;
         }

@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0", features = ["default"] }
-zip = { version = "0.6", default-features = false }
+zip = { version = "0.6", features = ["zstd"] }
