@@ -11,12 +11,14 @@ actually:
 * instantiates classes (TODO implement superclass instantiation)
 * runs bytecode (TODO more opcodes)
 * has INVOKEVIRTUAL and INVOKESPECIAL, including stackframes (TODO more invokes)
+* has a heap
 
 **more TODO's**
 * native methods 
 * stacktraces
 * check visibility
 * IO
+* garbage collection
 
 **Ultimate goal** 
 * Hello world domination
