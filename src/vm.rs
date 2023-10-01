@@ -1,14 +1,13 @@
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
 
 use crate::class::{AttributeType, Class, Value};
 use crate::class::Value::Void;
-use crate::classloader::{load_class, CpEntry};
+use crate::classloader::{CpEntry, load_class};
 use crate::heap::{Heap, Object};
 use crate::io::*;
 use crate::opcodes::*;
@@ -236,7 +235,7 @@ impl Vm {
                                     if let CpEntry::NameAndType(name, _) =
                                         method.constant_pool.get(name_and_type_index).unwrap()
                                     {
-                                        let value = (*(instance.deref()).get()).data.get(name).unwrap();
+                                        let value = (*(*instance).get()).data.get(name).unwrap();
                                         self.local_stack().push(Arc::clone(value));
                                     }
                                 }
@@ -255,7 +254,7 @@ impl Vm {
                                     let value = self.local_stack().pop()?;
                                     let mut objectref = &*self.local_stack().pop()?.get();
                                     if let Value::Ref(instance) = objectref {
-                                        (*(instance.deref()).get()).data.insert(*name_index, value);
+                                        (*(*instance).get()).data.insert(*name_index, value);
                                     }
                                 }
                             }
