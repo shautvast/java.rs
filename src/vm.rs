@@ -273,8 +273,9 @@ impl Vm {
                             args.insert(0, self.local_stack().pop()?);
                             let return_value = self.execute(class.as_str(), signature, args)?;
                             let borrow = return_value.borrow();
-                            if let &Void = borrow.deref() {
-                                self.local_stack().push(return_value.clone());
+                            match borrow.deref() {
+                                &Void => {}
+                                _ => { self.local_stack().push(return_value.clone()); }
                             }
                         }
 
@@ -293,8 +294,9 @@ impl Vm {
                             args.insert(0, self.local_stack().pop()?);
                             let return_value = self.execute(class.as_str(), signature, args)?;
                             let borrow = return_value.borrow();
-                            if let &Void = borrow.deref() {
-                                self.local_stack().push(return_value.clone());
+                            match borrow.deref() {
+                                &Void => {}
+                                _ => { self.local_stack().push(return_value.clone()); }
                             }
                         }
 
