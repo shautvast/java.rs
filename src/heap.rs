@@ -1,15 +1,16 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, UnsafeCell};
 use crate::class::{Class, Value};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 use crate::classloader::CpEntry;
 
 pub struct Object {
     // locked: bool,
     // hashcode: i32,
     pub class: Rc<Class>,
-    pub data: HashMap<u16, Rc<RefCell<Value>>>, //TODO optimize
+    pub data: HashMap<u16, Arc<UnsafeCell<Value>>>, //TODO optimize
 }
 
 unsafe impl Send for Object {}
@@ -17,7 +18,7 @@ unsafe impl Send for Object {}
 unsafe impl Sync for Object {}
 
 impl Object {
-    pub fn new(class: Rc<Class>, data: HashMap<u16, Rc<RefCell<Value>>>) -> Self {
+    pub fn new(class: Rc<Class>, data: HashMap<u16, Arc<UnsafeCell<Value>>>) -> Self {
         Self { class, data }
     }
 
@@ -26,6 +27,10 @@ impl Object {
             return name;
         }
         panic!()
+    }
+
+    unsafe fn get_mut<T>(ptr: &UnsafeCell<T>) -> &mut T {
+        unsafe { &mut *ptr.get() }
     }
 }
 
@@ -47,7 +52,7 @@ impl fmt::Debug for Object {
 }
 
 pub(crate) struct Heap {
-    objects: Vec<Rc<RefCell<Object>>>,
+    objects: Vec<Arc<UnsafeCell<Object>>>,
 }
 
 impl Heap {
@@ -55,7 +60,7 @@ impl Heap {
         Self { objects: vec![] }
     }
 
-    pub(crate) fn new_object(&mut self, object: Rc<RefCell<Object>>) {
+    pub(crate) fn new_object(&mut self, object: Arc<UnsafeCell<Object>>) {
         self.objects.push(object);
     }
 }

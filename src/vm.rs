@@ -1,7 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 
@@ -15,7 +16,7 @@ use crate::opcodes::*;
 #[derive(Debug)]
 struct StackFrame {
     at: String,
-    data: Vec<Rc<RefCell<Value>>>,
+    data: Vec<Arc<UnsafeCell<Value>>>,
 }
 
 impl StackFrame {
@@ -26,11 +27,11 @@ impl StackFrame {
         Self { at, data: vec![] }
     }
 
-    fn push(&mut self, val: Rc<RefCell<Value>>) {
+    fn push(&mut self, val: Arc<UnsafeCell<Value>>) {
         self.data.push(val);
     }
 
-    fn pop(&mut self) -> Result<Rc<RefCell<Value>>, Error> {
+    fn pop(&mut self) -> Result<Arc<UnsafeCell<Value>>, Error> {
         Ok(self.data.pop().unwrap())
     }
 }
@@ -92,7 +93,7 @@ impl Vm {
                 "L" => Value::Null,
                 _ => Value::Void,
             };
-            data.insert(f.name_index, Rc::new(RefCell::new(value)));
+            data.insert(f.name_index, Arc::new(UnsafeCell::new(value)));
         }
         Object::new(class.clone(), data)
     }
@@ -102,8 +103,8 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<Rc<RefCell<Value>>>,
-    ) -> Result<Rc<RefCell<Value>>, Error> {
+        args: Vec<Arc<UnsafeCell<Value>>>,
+    ) -> Result<Arc<UnsafeCell<Value>>, Error> {
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
@@ -120,7 +121,7 @@ impl Vm {
                     BIPUSH => {
                         println!("BISPUSH");
                         let c = code.opcodes[pc] as i32;
-                        self.local_stack().push(Rc::new(RefCell::new(Value::I32(c))));
+                        self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(c))));
                         pc += 1;
                     }
                     LDC => {
@@ -128,10 +129,10 @@ impl Vm {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::I32(*i))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(*i))));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::F32(*f))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F32(*f))));
                             }
                             _ => {}
                         }
@@ -141,10 +142,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::I32(*i))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(*i))));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::F32(*f))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F32(*f))));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -156,10 +157,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::F64(*d))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F64(*d))));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Rc::new(RefCell::new(Value::I64(*l))));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I64(*l))));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -222,22 +223,22 @@ impl Vm {
                     RETURN_VOID => {
                         println!("return");
                         self.stack.pop();
-                        return Ok(Rc::new(RefCell::new(Void)));
+                        return Ok(Arc::new(UnsafeCell::new(Void)));
                     }
                     GETFIELD => {
                         println!("GETFIELD");
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
-                            method.constant_pool.get(&cp_index).unwrap()
-                        {
-                            if let Value::Ref(instance) = self.local_stack().pop()?.borrow().deref() {
-                                //TODO smell?
-                                if let CpEntry::NameAndType(name, _) =
-                                    method.constant_pool.get(name_and_type_index).unwrap()
-                                {
-                                    let borrow = instance.borrow();
-                                    let value = borrow.data.get(name).unwrap();
-                                    self.local_stack().push(Rc::clone(value));
+                        unsafe {
+                            let cp_index = read_u16(&code.opcodes, pc);
+                            if let CpEntry::Fieldref(_class_index, name_and_type_index) =
+                                method.constant_pool.get(&cp_index).unwrap()
+                            {
+                                if let Value::Ref(instance) = &*self.local_stack().pop()?.get() {
+                                    if let CpEntry::NameAndType(name, _) =
+                                        method.constant_pool.get(name_and_type_index).unwrap()
+                                    {
+                                        let value = (*(instance.deref()).get()).data.get(name).unwrap();
+                                        self.local_stack().push(Arc::clone(value));
+                                    }
                                 }
                             }
                         }
@@ -245,17 +246,17 @@ impl Vm {
                     }
                     PUTFIELD => {
                         println!("PUTFIELD");
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
-                            method.constant_pool.get(&cp_index).unwrap()
-                        {
-                            if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
-                                let value = self.local_stack().pop()?;
-                                let objectref = self.local_stack().pop()?;
-                                let mut b = objectref.borrow_mut();
-                                let b = b.deref_mut();
-                                if let Value::Ref(object) = b {
-                                    object.borrow_mut().data.insert(*name_index, value);
+                        unsafe {
+                            let cp_index = read_u16(&code.opcodes, pc);
+                            if let CpEntry::Fieldref(_class_index, name_and_type_index) =
+                                method.constant_pool.get(&cp_index).unwrap()
+                            {
+                                if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
+                                    let value = self.local_stack().pop()?;
+                                    let mut objectref = &*self.local_stack().pop()?.get();
+                                    if let Value::Ref(instance) = objectref {
+                                        (*(instance.deref()).get()).data.insert(*name_index, value);
+                                    }
                                 }
                             }
                         }
@@ -263,43 +264,43 @@ impl Vm {
                     }
                     INVOKEVIRTUAL => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            let signature = method.0.as_str();
-                            let num_args = method.1;
-                            let mut args = Vec::with_capacity(num_args);
-                            for _ in 0..num_args {
+                        unsafe {
+                            if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                                let signature = method.0.as_str();
+                                let num_args = method.1;
+                                let mut args = Vec::with_capacity(num_args);
+                                for _ in 0..num_args {
+                                    args.insert(0, self.local_stack().pop()?);
+                                }
                                 args.insert(0, self.local_stack().pop()?);
-                            }
-                            args.insert(0, self.local_stack().pop()?);
-                            let return_value = self.execute(class.as_str(), signature, args)?;
-                            let borrow = return_value.borrow();
-                            match borrow.deref() {
-                                &Void => {}
-                                _ => { self.local_stack().push(return_value.clone()); }
+                                let mut returnvalue = self.execute(class.as_str(), signature, args)?;
+                                match *returnvalue.get() {
+                                    Void => {}
+                                    _ => { self.local_stack().push(returnvalue.clone()); }
+                                }
                             }
                         }
-
                         pc += 2;
                     }
                     INVOKESPECIAL => {
                         println!("INVOKESPECIAL");
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            let signature = method.0.as_str();
-                            let num_args = method.1;
-                            let mut args = vec![];
-                            for _ in 0..num_args {
+                        unsafe {
+                            let cp_index = read_u16(&code.opcodes, pc);
+                            if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                                let signature = method.0.as_str();
+                                let num_args = method.1;
+                                let mut args = vec![];
+                                for _ in 0..num_args {
+                                    args.insert(0, self.local_stack().pop()?);
+                                }
                                 args.insert(0, self.local_stack().pop()?);
-                            }
-                            args.insert(0, self.local_stack().pop()?);
-                            let return_value = self.execute(class.as_str(), signature, args)?;
-                            let borrow = return_value.borrow();
-                            match borrow.deref() {
-                                &Void => {}
-                                _ => { self.local_stack().push(return_value.clone()); }
+                                let mut returnvalue = self.execute(class.as_str(), signature, args)?;
+                                match *returnvalue.get() {
+                                    Void => {}
+                                    _ => { self.local_stack().push(returnvalue.clone()); }
+                                }
                             }
                         }
-
                         pc += 2;
                     }
                     NEW => {
@@ -313,8 +314,8 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Rc::new(RefCell::new(self.new_instance(class)));
-                                self.local_stack().push(Rc::new(RefCell::new(Value::Ref(Rc::clone(&object)))));
+                                let object = Arc::new(UnsafeCell::new(self.new_instance(class)));
+                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::Ref(Arc::clone(&object)))));
                                 self.heap.new_object(object);
                             }
                         }
