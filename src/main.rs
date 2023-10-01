@@ -8,7 +8,7 @@ fn main() -> Result<(), Error> {
     let mut vm = Vm::new("tests");
     let main_class = "Main";
 
-    vm.execute(main_class, "main([Ljava/lang/String;)V", None)
+    vm.execute(main_class, "main([Ljava/lang/String;)V", vec![])
         .unwrap();
     Ok(())
 }

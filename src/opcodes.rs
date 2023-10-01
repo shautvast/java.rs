@@ -13,18 +13,18 @@ pub const LDC2_W: &u8 = &20; // (0x14) Push long or double from run-time constan
 // pub const dload:u8 = 24; // (0x18) load double from local variable
 // pub const aload:u8 = 25; //0x19
 //
-// pub const fload_0:u8 = 34; // (0x22) Load float 0 from local variable
-// pub const fload_1:u8 = 35; // (0x23) Load float 1 from local variable
-// pub const fload_2:u8 = 36; // (0x24) Load float 2 from local variable
-// pub const fload_3:u8 = 37; // (0x25) Load float 3 from local variable
+pub const FLOAD_0: &u8 = &34; // (0x22) Load float from local variable 0
+pub const FLOAD_1: &u8 = &35; // (0x23) Load float from local variable 1
+pub const FLOAD_2: &u8 = &36; // (0x24) Load float from local variable 2
+pub const FLOAD_3: &u8 = &37; // (0x25) Load float from local variable 3
 // pub const dload_0:u8 = 38; //  (0x26) Load double 0 from local variable
 // pub const dload_1:u8 = 39; //  (0x27) Load double 1 from local variable
 // pub const dload_2:u8 = 40; //  (0x28) Load double 2 from local variable
 // pub const dload_3:u8 = 41; // (0x29) Load double 3 from local variable
 pub const ALOAD_0: &u8 = &42; // (0x2a)
- // pub const aload_1:u8 = 43;// (0x2a)
- // pub const aload_2:u8 = 44;// (0x2b)
- // pub const aload_3:u8 = 45;// (0x2c)
+pub const ALOAD_1: &u8 = &43;// (0x2a)
+pub const ALOAD_2: &u8 = &44;// (0x2b)
+pub const ALOAD_3: &u8 = &45;// (0x2c)
 
 // pub const faload: u8 = 48; // (0x30) Load float from array
 // pub const daload:u8 = 49; // (0x31) load double from array
@@ -89,6 +89,7 @@ pub const DRETURN: &u8 = &175; // (0xaf) Return double from method
 pub const RETURN_VOID: &u8 = &177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
   // pub const getstatic: u8 = 178; // (0xb2) Get static field from class
 pub const GETFIELD: &u8 = &180; // (0xb4) Fetch field from object3
+pub const PUTFIELD: &u8 = &181; // (0xb5) Set field in object
 pub const INVOKEVIRTUAL: &u8 = &182; // (0xb6) Invoke instance method; dispatch based on class
 pub const NEW: &u8 = &187; // (0xbb) Create new object
 //

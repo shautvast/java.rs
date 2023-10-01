@@ -13,12 +13,16 @@ use crate::opcodes::*;
 
 #[derive(Debug)]
 struct StackFrame {
+    at: String,
     data: Vec<Arc<Value>>,
 }
 
 impl StackFrame {
-    fn new() -> Self {
-        Self { data: vec![] }
+    fn new(at_class: &str, at_method: &str) -> Self {
+        let mut at: String = at_class.into();
+        at.push('.');
+        at.push_str(at_method);
+        Self { at, data: vec![] }
     }
 
     fn push(&mut self, val: Arc<Value>) {
@@ -97,13 +101,13 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        instance: Option<Arc<Value>>,
+        args: Vec<Arc<Value>>,
     ) -> Result<Arc<Value>, Error> {
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
-            let stackframe = StackFrame::new();
+            let stackframe = StackFrame::new(class_name, method_name);
             self.stack.push(stackframe);
 
             let mut pc: usize = 0;
@@ -113,11 +117,13 @@ impl Vm {
                 println!("opcode {} ", opcode);
                 match opcode {
                     BIPUSH => {
+                        println!("BISPUSH");
                         let c = code.opcodes[pc] as i32;
                         self.local_stack().push(Arc::new(Value::I32(c)));
                         pc += 1;
                     }
                     LDC => {
+                        println!("LDC");
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
@@ -161,18 +167,36 @@ impl Vm {
 
                         pc += 2;
                     }
+                    FLOAD_0 => {
+                        self.local_stack().push(args[0].clone());
+                    }
+                    FLOAD_1 => {
+                        println!("FLOAD_1");
+                        self.local_stack().push(args[1].clone());
+                    }
+                    FLOAD_2 => {
+                        self.local_stack().push(args[2].clone());
+                    }
+                    FLOAD_3 => {
+                        self.local_stack().push(args[3].clone());
+                    }
                     ALOAD_0 => {
                         println!("ALOAD_0");
-                        match instance.clone() {
-                            Some(instance) => {
-                                self.local_stack().push(instance);
-                            }
-                            None => {
-                                panic!("static context")
-                            }
-                        }
+                        self.local_stack().push(args[0].clone());
                     }
-                    POP =>{
+                    ALOAD_1 => {
+                        println!("ALOAD_1");
+                        self.local_stack().push(args[1].clone());
+                    }
+                    ALOAD_2 => {
+                        println!("ALOAD_2");
+                        self.local_stack().push(args[2].clone());
+                    }
+                    ALOAD_3 => {
+                        println!("ALOAD_3");
+                        self.local_stack().push(args[3].clone());
+                    }
+                    POP => {
                         self.local_stack().pop().expect("Stack empty");
                     }
                     DUP => {
@@ -218,11 +242,30 @@ impl Vm {
                         }
                         pc += 2;
                     }
+                    PUTFIELD => {
+                        println!("PUTFIELD");
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
+                            method.constant_pool.get(&cp_index).unwrap()
+                        {
+                            let value = self.local_stack().pop()?;
+                            println!("value {:?}", value);
+                            let objectref = self.local_stack().pop()?;
+                            println!("objectref {:?}", objectref);
+                        }
+                        pc += 2;
+                    }
                     INVOKEVIRTUAL => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let instance = self.local_stack().pop().unwrap();
                         if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            let return_value = self.execute(class.as_str(), method.as_str(), Some(instance))?;
+                            let signature = method.0.as_str();
+                            let num_args = method.1;
+                            let mut args = Vec::with_capacity(num_args);
+                            for _ in 0..num_args {
+                                args.insert(0, self.local_stack().pop()?);
+                            }
+                            args.insert(0, self.local_stack().pop()?);
+                            let return_value = self.execute(class.as_str(), signature, args)?;
                             if let Void = *return_value {} else { // not let?
                                 self.local_stack().push(return_value);
                             }
@@ -233,9 +276,15 @@ impl Vm {
                     INVOKESPECIAL => {
                         println!("INVOKESPECIAL");
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let instance = self.local_stack().pop().unwrap();
                         if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            let return_value = self.execute(class.as_str(), method.as_str(), Some(instance))?;
+                            let signature = method.0.as_str();
+                            let num_args = method.1;
+                            let mut args = vec![];
+                            for _ in 0..num_args {
+                                args.insert(0, self.local_stack().pop()?);
+                            }
+                            args.insert(0, self.local_stack().pop()?);
+                            let return_value = self.execute(class.as_str(), signature, args)?;
                             if let Void = *return_value {} else { // not let?
                                 self.local_stack().push(return_value);
                             }
@@ -275,7 +324,7 @@ impl Vm {
 
 
 //TODO refs with lifetime
-fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, String)> {
+fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, (String, usize))> {
     if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
             if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
@@ -288,15 +337,39 @@ fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option
     None
 }
 
-fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<String> {
+fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, usize)> {
     if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
         if let CpEntry::Utf8(method_name) = cp.get(method_name_index).unwrap() {
             if let CpEntry::Utf8(signature) = cp.get(signature_index).unwrap() {
                 let mut method_signature: String = method_name.into();
+                let num_args = get_hum_args(signature);
                 method_signature.push_str(signature);
-                return Some(method_signature);
+
+                return Some((method_signature, num_args));
             }
         }
     }
     None
+}
+
+fn get_hum_args(signature: &str) -> usize {
+    let mut num = 0;
+    let mut i = 1;
+    let chars: Vec<char> = signature.chars().collect();
+
+    while i < chars.len() {
+        if chars[i] == 'L' {
+            i += 1;
+            while chars[i] != ';' {
+                i += 1;
+            }
+            num += 1;
+        } else if chars[i] == ')' {
+            break;
+        } else {
+            i += 1;
+            num += 1;
+        }
+    }
+    num
 }
