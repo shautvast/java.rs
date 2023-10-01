@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use crate::classloader::CpEntry;
 use crate::heap::Object;
 use anyhow::{anyhow, Error};
@@ -263,7 +264,7 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
-    Ref(Rc<Object>),
+    Ref(Rc<RefCell<Object>>),
 }
 
 unsafe impl Send for Value {}

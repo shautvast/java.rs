@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use crate::class::{Class, Value};
 use std::collections::HashMap;
 use std::fmt;
@@ -8,7 +9,7 @@ pub struct Object {
     // locked: bool,
     // hashcode: i32,
     pub class: Rc<Class>,
-    pub data: HashMap<u16, Rc<Value>>, //TODO optimize
+    pub data: HashMap<u16, Rc<RefCell<Value>>>, //TODO optimize
 }
 
 unsafe impl Send for Object {}
@@ -16,7 +17,7 @@ unsafe impl Send for Object {}
 unsafe impl Sync for Object {}
 
 impl Object {
-    pub fn new(class: Rc<Class>, data: HashMap<u16, Rc<Value>>) -> Self {
+    pub fn new(class: Rc<Class>, data: HashMap<u16, Rc<RefCell<Value>>>) -> Self {
         Self { class, data }
     }
 
@@ -46,7 +47,7 @@ impl fmt::Debug for Object {
 }
 
 pub(crate) struct Heap {
-    objects: Vec<Rc<Object>>,
+    objects: Vec<Rc<RefCell<Object>>>,
 }
 
 impl Heap {
@@ -54,7 +55,7 @@ impl Heap {
         Self { objects: vec![] }
     }
 
-    pub(crate) fn new_object(&mut self, object: Rc<Object>) {
+    pub(crate) fn new_object(&mut self, object: Rc<RefCell<Object>>) {
         self.objects.push(object);
     }
 }

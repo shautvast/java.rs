@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Error};
@@ -13,7 +15,7 @@ use crate::opcodes::*;
 #[derive(Debug)]
 struct StackFrame {
     at: String,
-    data: Vec<Rc<Value>>,
+    data: Vec<Rc<RefCell<Value>>>,
 }
 
 impl StackFrame {
@@ -24,11 +26,11 @@ impl StackFrame {
         Self { at, data: vec![] }
     }
 
-    fn push(&mut self, val: Rc<Value>) {
+    fn push(&mut self, val: Rc<RefCell<Value>>) {
         self.data.push(val);
     }
 
-    fn pop(&mut self) -> Result<Rc<Value>, Error> {
+    fn pop(&mut self) -> Result<Rc<RefCell<Value>>, Error> {
         Ok(self.data.pop().unwrap())
     }
 }
@@ -90,7 +92,7 @@ impl Vm {
                 "L" => Value::Null,
                 _ => Value::Void,
             };
-            data.insert(f.name_index, Rc::new(value));
+            data.insert(f.name_index, Rc::new(RefCell::new(value)));
         }
         Object::new(class.clone(), data)
     }
@@ -100,8 +102,8 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<Rc<Value>>,
-    ) -> Result<Rc<Value>, Error> {
+        args: Vec<Rc<RefCell<Value>>>,
+    ) -> Result<Rc<RefCell<Value>>, Error> {
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
@@ -118,7 +120,7 @@ impl Vm {
                     BIPUSH => {
                         println!("BISPUSH");
                         let c = code.opcodes[pc] as i32;
-                        self.local_stack().push(Rc::new(Value::I32(c)));
+                        self.local_stack().push(Rc::new(RefCell::new(Value::I32(c))));
                         pc += 1;
                     }
                     LDC => {
@@ -126,10 +128,10 @@ impl Vm {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Rc::new(Value::I32(*i)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::I32(*i))));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Rc::new(Value::F32(*f)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::F32(*f))));
                             }
                             _ => {}
                         }
@@ -139,10 +141,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Rc::new(Value::I32(*i)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::I32(*i))));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Rc::new(Value::F32(*f)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::F32(*f))));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -154,10 +156,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Rc::new(Value::F64(*d)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::F64(*d))));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Rc::new(Value::I64(*l)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::I64(*l))));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -220,7 +222,7 @@ impl Vm {
                     RETURN_VOID => {
                         println!("return");
                         self.stack.pop();
-                        return Ok(Rc::new(Void));
+                        return Ok(Rc::new(RefCell::new(Void)));
                     }
                     GETFIELD => {
                         println!("GETFIELD");
@@ -228,14 +230,14 @@ impl Vm {
                         if let CpEntry::Fieldref(_class_index, name_and_type_index) =
                             method.constant_pool.get(&cp_index).unwrap()
                         {
-                            if let Value::Ref(inst) = &*self.local_stack().pop()? {
+                            if let Value::Ref(instance) = self.local_stack().pop()?.borrow().deref() {
                                 //TODO smell?
                                 if let CpEntry::NameAndType(name, _) =
                                     method.constant_pool.get(name_and_type_index).unwrap()
                                 {
-                                    let value = inst.data.get(name).unwrap();
-                                    println!("{:?}", value);
-                                    self.local_stack().push(value.clone());
+                                    let borrow = instance.borrow();
+                                    let value = borrow.data.get(name).unwrap();
+                                    self.local_stack().push(Rc::clone(value));
                                 }
                             }
                         }
@@ -247,10 +249,15 @@ impl Vm {
                         if let CpEntry::Fieldref(_class_index, name_and_type_index) =
                             method.constant_pool.get(&cp_index).unwrap()
                         {
-                            let value = self.local_stack().pop()?;
-                            println!("value {:?}", value);
-                            let objectref = self.local_stack().pop()?;
-                            println!("objectref {:?}", objectref);
+                            if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
+                                let value = self.local_stack().pop()?;
+                                let objectref = self.local_stack().pop()?;
+                                let mut b = objectref.borrow_mut();
+                                let b = b.deref_mut();
+                                if let Value::Ref(object) = b {
+                                    object.borrow_mut().data.insert(*name_index, value);
+                                }
+                            }
                         }
                         pc += 2;
                     }
@@ -265,8 +272,9 @@ impl Vm {
                             }
                             args.insert(0, self.local_stack().pop()?);
                             let return_value = self.execute(class.as_str(), signature, args)?;
-                            if let Void = *return_value {} else { // not let?
-                                self.local_stack().push(return_value);
+                            let borrow = return_value.borrow();
+                            if let &Void = borrow.deref() {
+                                self.local_stack().push(return_value.clone());
                             }
                         }
 
@@ -284,8 +292,9 @@ impl Vm {
                             }
                             args.insert(0, self.local_stack().pop()?);
                             let return_value = self.execute(class.as_str(), signature, args)?;
-                            if let Void = *return_value {} else { // not let?
-                                self.local_stack().push(return_value);
+                            let borrow = return_value.borrow();
+                            if let &Void = borrow.deref() {
+                                self.local_stack().push(return_value.clone());
                             }
                         }
 
@@ -302,8 +311,8 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Rc::new(self.new_instance(class));
-                                self.local_stack().push(Rc::new(Value::Ref(object.clone())));
+                                let object = Rc::new(RefCell::new(self.new_instance(class)));
+                                self.local_stack().push(Rc::new(RefCell::new(Value::Ref(Rc::clone(&object)))));
                                 self.heap.new_object(object);
                             }
                         }
