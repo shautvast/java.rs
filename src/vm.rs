@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 
@@ -14,7 +13,7 @@ use crate::opcodes::*;
 #[derive(Debug)]
 struct StackFrame {
     at: String,
-    data: Vec<Arc<Value>>,
+    data: Vec<Rc<Value>>,
 }
 
 impl StackFrame {
@@ -25,11 +24,11 @@ impl StackFrame {
         Self { at, data: vec![] }
     }
 
-    fn push(&mut self, val: Arc<Value>) {
+    fn push(&mut self, val: Rc<Value>) {
         self.data.push(val);
     }
 
-    fn pop(&mut self) -> Result<Arc<Value>, Error> {
+    fn pop(&mut self) -> Result<Rc<Value>, Error> {
         Ok(self.data.pop().unwrap())
     }
 }
@@ -37,7 +36,7 @@ impl StackFrame {
 /// single threaded vm
 pub struct Vm {
     classpath: Vec<String>,
-    classes: HashMap<String, Arc<Class>>,
+    classes: HashMap<String, Rc<Class>>,
     heap: Heap,
     stack: Vec<StackFrame>,
 }
@@ -63,7 +62,7 @@ impl Vm {
     /// parse the binary data into a Class struct
     /// gets the file from cache, or reads it from classpath
     /// Vm keeps ownership of the class and hands out Arc references to it
-    pub fn get_class(&mut self, class_name: &str) -> Result<Arc<Class>, Error> {
+    pub fn get_class(&mut self, class_name: &str) -> Result<Rc<Class>, Error> {
         println!("get_class {}", class_name);
         let entry = self.classes.entry(class_name.into());
         let entry = entry.or_insert_with(|| {
@@ -71,12 +70,12 @@ impl Vm {
             let resolved_path = find_class(&self.classpath, class_name).expect("Class not found");
             // println!("full path {}", resolved_path);
             let bytecode = read_bytecode(resolved_path).unwrap();
-            Arc::new(load_class(bytecode).unwrap())
+            Rc::new(load_class(bytecode).unwrap())
         });
         Ok(entry.clone())
     }
 
-    pub fn new_instance(&self, class: Arc<Class>) -> Object {
+    pub fn new_instance(&self, class: Rc<Class>) -> Object {
         //TODO add fields from superclasses
         let mut data = HashMap::new();
         for f in &class.fields {
@@ -91,7 +90,7 @@ impl Vm {
                 "L" => Value::Null,
                 _ => Value::Void,
             };
-            data.insert(f.name_index, Arc::new(value));
+            data.insert(f.name_index, Rc::new(value));
         }
         Object::new(class.clone(), data)
     }
@@ -101,8 +100,8 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<Arc<Value>>,
-    ) -> Result<Arc<Value>, Error> {
+        args: Vec<Rc<Value>>,
+    ) -> Result<Rc<Value>, Error> {
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
@@ -119,7 +118,7 @@ impl Vm {
                     BIPUSH => {
                         println!("BISPUSH");
                         let c = code.opcodes[pc] as i32;
-                        self.local_stack().push(Arc::new(Value::I32(c)));
+                        self.local_stack().push(Rc::new(Value::I32(c)));
                         pc += 1;
                     }
                     LDC => {
@@ -127,10 +126,10 @@ impl Vm {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Arc::new(Value::I32(*i)));
+                                self.local_stack().push(Rc::new(Value::I32(*i)));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Arc::new(Value::F32(*f)));
+                                self.local_stack().push(Rc::new(Value::F32(*f)));
                             }
                             _ => {}
                         }
@@ -140,10 +139,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Arc::new(Value::I32(*i)));
+                                self.local_stack().push(Rc::new(Value::I32(*i)));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Arc::new(Value::F32(*f)));
+                                self.local_stack().push(Rc::new(Value::F32(*f)));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -155,10 +154,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Arc::new(Value::F64(*d)));
+                                self.local_stack().push(Rc::new(Value::F64(*d)));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Arc::new(Value::I64(*l)));
+                                self.local_stack().push(Rc::new(Value::I64(*l)));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -221,7 +220,7 @@ impl Vm {
                     RETURN_VOID => {
                         println!("return");
                         self.stack.pop();
-                        return Ok(Arc::new(Void));
+                        return Ok(Rc::new(Void));
                     }
                     GETFIELD => {
                         println!("GETFIELD");
@@ -303,8 +302,8 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Arc::new(self.new_instance(class));
-                                self.local_stack().push(Arc::new(Value::Ref(object.clone())));
+                                let object = Rc::new(self.new_instance(class));
+                                self.local_stack().push(Rc::new(Value::Ref(object.clone())));
                                 self.heap.new_object(object);
                             }
                         }

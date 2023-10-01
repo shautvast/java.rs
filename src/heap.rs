@@ -1,14 +1,14 @@
 use crate::class::{Class, Value};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::rc::Rc;
 use crate::classloader::CpEntry;
 
 pub struct Object {
     // locked: bool,
     // hashcode: i32,
-    pub class: Arc<Class>,
-    pub data: HashMap<u16, Arc<Value>>, //TODO optimize
+    pub class: Rc<Class>,
+    pub data: HashMap<u16, Rc<Value>>, //TODO optimize
 }
 
 unsafe impl Send for Object {}
@@ -16,7 +16,7 @@ unsafe impl Send for Object {}
 unsafe impl Sync for Object {}
 
 impl Object {
-    pub fn new(class: Arc<Class>, data: HashMap<u16, Arc<Value>>) -> Self {
+    pub fn new(class: Rc<Class>, data: HashMap<u16, Rc<Value>>) -> Self {
         Self { class, data }
     }
 
@@ -46,7 +46,7 @@ impl fmt::Debug for Object {
 }
 
 pub(crate) struct Heap {
-    objects: Vec<Arc<Object>>,
+    objects: Vec<Rc<Object>>,
 }
 
 impl Heap {
@@ -54,7 +54,7 @@ impl Heap {
         Self { objects: vec![] }
     }
 
-    pub(crate) fn new_object(&mut self, object: Arc<Object>) {
+    pub(crate) fn new_object(&mut self, object: Rc<Object>) {
         self.objects.push(object);
     }
 }

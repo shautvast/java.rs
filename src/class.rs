@@ -4,7 +4,6 @@ use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::io::read_u16;
 
@@ -264,7 +263,7 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
-    Ref(Arc<Object>),
+    Ref(Rc<Object>),
 }
 
 unsafe impl Send for Value {}
