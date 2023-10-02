@@ -26,7 +26,11 @@ impl StackFrame {
         Self { at, data: vec![] }
     }
 
-    fn push(&mut self, val: Arc<UnsafeCell<Value>>) {
+    fn push(&mut self, val: Value) {
+        self.data.push(Arc::new(UnsafeCell::new(val)));
+    }
+
+    fn push_arc(&mut self, val: Arc<UnsafeCell<Value>>) {
         self.data.push(val);
     }
 
@@ -42,11 +46,11 @@ pub struct Vm {
     stack: Vec<StackFrame>,
 }
 
-#[cfg(target_family="unix")]
-const CP_SEP: char = ':';
+#[cfg(target_family = "unix")]
+const PATH_SEPARATOR: char = ':';
 
-#[cfg(target_family="windows")]
-const CP_SEP: char = ';';
+#[cfg(target_family = "windows")]
+const PATH_SEPARATOR: char = ';';
 
 
 impl Vm {
@@ -57,7 +61,7 @@ impl Vm {
 
     pub fn new(classpath: &'static str) -> Self {
         Self {
-            classpath: classpath.split(CP_SEP).map(|s| s.to_owned()).collect(),
+            classpath: classpath.split(PATH_SEPARATOR).map(|s| s.to_owned()).collect(),
             classes: HashMap::new(),
             heap: Heap::new(),
             stack: vec![],
@@ -119,20 +123,51 @@ impl Vm {
                 let opcode = read_u8(&code.opcodes, pc);
                 println!("opcode {} ", opcode);
                 match opcode {
+                    ACONST_NULL => {
+                        self.local_stack().push(Value::Null)
+                    }
+                    ICONST_M1 => {
+                        self.local_stack().push(Value::I32(-1))
+                    }
+                    ICONST_0 => {
+                        self.local_stack().push(Value::I32(0))
+                    }
+                    ICONST_1 => {
+                        self.local_stack().push(Value::I32(1))
+                    }
+                    ICONST_2 => {
+                        self.local_stack().push(Value::I32(2))
+                    }
+                    ICONST_3 => {
+                        self.local_stack().push(Value::I32(3))
+                    }
+                    ICONST_4 => {
+                        self.local_stack().push(Value::I32(4))
+                    }
+                    ICONST_5 => {
+                        self.local_stack().push(Value::I32(5))
+                    }
+                    FCONST_0 =>{
+                        self.local_stack().push(Value::F32(0.0))
+                    }
+                    FCONST_1 =>{
+                        self.local_stack().push(Value::F32(1.0))
+                    }
+                    FCONST_2 =>{
+                        self.local_stack().push(Value::F32(2.0))
+                    }
                     BIPUSH => {
-                        println!("BISPUSH");
                         let c = read_u8(&code.opcodes, pc);
-                        self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(c as i32))));
+                        self.local_stack().push(Value::I32(c as i32));
                     }
                     LDC => {
-                        println!("LDC");
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(*i))));
+                                self.local_stack().push(Value::I32(*i));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F32(*f))));
+                                self.local_stack().push(Value::F32(*f));
                             }
                             _ => {}
                         }
@@ -141,10 +176,10 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(*i))));
+                                self.local_stack().push(Value::I32(*i));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F32(*f))));
+                                self.local_stack().push(Value::F32(*f));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -155,74 +190,45 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::F64(*d))));
+                                self.local_stack().push(Value::F64(*d));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::I64(*l))));
+                                self.local_stack().push(Value::I64(*l));
                             }
                             _ => {
                                 panic!("unexpected")
                             }
                         }
                     }
-                    FLOAD_0 => {
-                        self.local_stack().push(args[0].clone());
+                    ILOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
+                        self.local_stack().push_arc(args[0].clone());
                     }
-                    FLOAD_1 => {
-                        println!("FLOAD_1");
-                        self.local_stack().push(args[1].clone());
+                    ILOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
+                        self.local_stack().push_arc(args[1].clone());
                     }
-                    FLOAD_2 => {
-                        self.local_stack().push(args[2].clone());
+                    ILOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
+                        self.local_stack().push_arc(args[2].clone());
                     }
-                    FLOAD_3 => {
-                        self.local_stack().push(args[3].clone());
-                    }
-                    ALOAD_0 => {
-                        println!("ALOAD_0");
-                        self.local_stack().push(args[0].clone());
-                    }
-                    ALOAD_1 => {
-                        println!("ALOAD_1");
-                        self.local_stack().push(args[1].clone());
-                    }
-                    ALOAD_2 => {
-                        println!("ALOAD_2");
-                        self.local_stack().push(args[2].clone());
-                    }
-                    ALOAD_3 => {
-                        println!("ALOAD_3");
-                        self.local_stack().push(args[3].clone());
+                    ILOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
+                        self.local_stack().push_arc(args[3].clone());
                     }
                     POP => {
                         self.local_stack().pop().expect("Stack empty");
                     }
                     DUP => {
-                        println!("DUP");
                         let value = self.local_stack().pop().expect("Stack empty");
                         println!("{:?}", value);
-                        self.local_stack().push(value.clone());
-                        self.local_stack().push(value);
+                        self.local_stack().push_arc(value.clone());
+                        self.local_stack().push_arc(value);
                     }
-                    IRETURN => {
-                        println!("return I");
-                        return self.local_stack().pop();
-                    }
-                    DRETURN => {
-                        println!("return D");
-                        return self.local_stack().pop();
-                    }
-                    FRETURN => {
-                        println!("return F");
+                    IRETURN | FRETURN | DRETURN => {
                         return self.local_stack().pop();
                     }
                     RETURN_VOID => {
-                        println!("return");
-                        self.stack.pop();
+                        self.stack.pop(); // Void is also returned as a value
                         return Ok(Arc::new(UnsafeCell::new(Void)));
                     }
                     GETFIELD => {
-                        println!("GETFIELD");
                         unsafe {
                             let cp_index = read_u16(&code.opcodes, pc);
                             if let CpEntry::Fieldref(_class_index, name_and_type_index) =
@@ -233,14 +239,13 @@ impl Vm {
                                         method.constant_pool.get(name_and_type_index).unwrap()
                                     {
                                         let value = (*(*instance).get()).data.get(name).unwrap();
-                                        self.local_stack().push(Arc::clone(value));
+                                        self.local_stack().push_arc(Arc::clone(value));
                                     }
                                 }
                             }
                         }
                     }
                     PUTFIELD => {
-                        println!("PUTFIELD");
                         unsafe {
                             let cp_index = read_u16(&code.opcodes, pc);
                             if let CpEntry::Fieldref(_class_index, name_and_type_index) =
@@ -268,13 +273,12 @@ impl Vm {
                                 let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
                                 match *returnvalue.get() {
                                     Void => {}
-                                    _ => { self.local_stack().push(returnvalue.clone()); }
+                                    _ => { self.local_stack().push_arc(returnvalue.clone()); }
                                 }
                             }
                         }
                     }
                     INVOKESPECIAL => {
-                        println!("INVOKESPECIAL");
                         unsafe {
                             let cp_index = read_u16(&code.opcodes, pc);
                             if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
@@ -286,7 +290,7 @@ impl Vm {
                                 let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
                                 match *returnvalue.get() {
                                     Void => {}
-                                    _ => { self.local_stack().push(returnvalue.clone()); }
+                                    _ => { self.local_stack().push_arc(returnvalue.clone()); }
                                 }
                             }
                         }
@@ -303,7 +307,7 @@ impl Vm {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
                                 let object = Arc::new(UnsafeCell::new(self.new_instance(class)));
-                                self.local_stack().push(Arc::new(UnsafeCell::new(Value::Ref(Arc::clone(&object)))));
+                                self.local_stack().push(Value::Ref(Arc::clone(&object)));
                                 self.heap.new_object(object);
                             }
                         }
@@ -339,7 +343,7 @@ fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option
                 if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
                     return Some(Invocation {
                         class_name: class_name.into(),
-                        method: method_signature
+                        method: method_signature,
                     });
                 }
             }

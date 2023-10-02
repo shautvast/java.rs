@@ -1,7 +1,16 @@
-// pub const aconst_null: u8 = 1; // (0x01)
-// pub const fconst_0: u8 = 11; // (0xb) Push float 0
-// pub const fconst_1: u8 = 12; // (0xc) Push float 1
-// pub const fconst_2: u8 = 13; // (0xd) Push float 2
+pub const NOP:u8 = 0; //(0x0) Do nothing
+pub const ACONST_NULL: u8 = 1; // (0x01) Push null
+pub const ICONST_M1: u8 = 2; //(0x2) Push int constant -1
+pub const ICONST_0: u8 = 3; //(0x2) Push int constant 0
+pub const ICONST_1: u8 = 4; //(0x2) Push int constant 1
+pub const ICONST_2: u8 = 5; //(0x2) Push int constant 2
+pub const ICONST_3: u8 = 6; //(0x2) Push int constant 3
+pub const ICONST_4: u8 = 7; //(0x2) Push int constant 4
+pub const ICONST_5: u8 = 8; //(0x2) Push int constant 5
+
+pub const FCONST_0: u8 = 11; // (0xb) Push float 0
+pub const FCONST_1: u8 = 12; // (0xc) Push float 1
+pub const FCONST_2: u8 = 13; // (0xd) Push float 2
 // pub const dconst_0:u8 = 14; // (0xe) push double 0
 // pub const dconst_1:u8 = 15; // (0xf) push double 1
 // TODO turn all into references
@@ -13,14 +22,18 @@ pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant 
 // pub const dload:u8 = 24; // (0x18) load double from local variable
 // pub const aload:u8 = 25; //0x19
 //
+pub const ILOAD_0: u8 = 26; // (0x1a) Load int from local variable 0
+pub const ILOAD_1: u8 = 27; // (0x1a) Load int from local variable 1
+pub const ILOAD_2: u8 = 28; // (0x1a) Load int from local variable 2
+pub const ILOAD_3: u8 = 29; // (0x1a) Load int from local variable 3
 pub const FLOAD_0: u8 = 34; // (0x22) Load float from local variable 0
 pub const FLOAD_1: u8 = 35; // (0x23) Load float from local variable 1
 pub const FLOAD_2: u8 = 36; // (0x24) Load float from local variable 2
 pub const FLOAD_3: u8 = 37; // (0x25) Load float from local variable 3
-// pub const dload_0:u8 = 38; //  (0x26) Load double 0 from local variable
-// pub const dload_1:u8 = 39; //  (0x27) Load double 1 from local variable
-// pub const dload_2:u8 = 40; //  (0x28) Load double 2 from local variable
-// pub const dload_3:u8 = 41; // (0x29) Load double 3 from local variable
+pub const DLOAD_0:u8 = 38; //  (0x26) Load double from local variable 0
+pub const DLOAD_1:u8 = 39; //  (0x27) Load double from local variable 1
+pub const DLOAD_2:u8 = 40; //  (0x28) Load double from local variable 2
+pub const DLOAD_3:u8 = 41; // (0x29) Load double from local variable 3
 pub const ALOAD_0: u8 = 42; // (0x2a)
 pub const ALOAD_1: u8 = 43;// (0x2a)
 pub const ALOAD_2: u8 = 44;// (0x2b)
