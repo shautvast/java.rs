@@ -124,41 +124,57 @@ impl Vm {
                 println!("opcode {} ", opcode);
                 match opcode {
                     ACONST_NULL => {
-                        self.local_stack().push(Value::Null)
+                        self.local_stack().push(Value::Null);
                     }
                     ICONST_M1 => {
-                        self.local_stack().push(Value::I32(-1))
+                        self.local_stack().push(Value::I32(-1));
                     }
                     ICONST_0 => {
-                        self.local_stack().push(Value::I32(0))
+                        self.local_stack().push(Value::I32(0));
                     }
                     ICONST_1 => {
-                        self.local_stack().push(Value::I32(1))
+                        self.local_stack().push(Value::I32(1));
                     }
                     ICONST_2 => {
-                        self.local_stack().push(Value::I32(2))
+                        self.local_stack().push(Value::I32(2));
                     }
                     ICONST_3 => {
-                        self.local_stack().push(Value::I32(3))
+                        self.local_stack().push(Value::I32(3));
                     }
                     ICONST_4 => {
-                        self.local_stack().push(Value::I32(4))
+                        self.local_stack().push(Value::I32(4));
                     }
                     ICONST_5 => {
-                        self.local_stack().push(Value::I32(5))
+                        self.local_stack().push(Value::I32(5));
                     }
-                    FCONST_0 =>{
-                        self.local_stack().push(Value::F32(0.0))
+                    LCONST_0 => {
+                        self.local_stack().push(Value::I64(0));
                     }
-                    FCONST_1 =>{
-                        self.local_stack().push(Value::F32(1.0))
+                    LCONST_1 => {
+                        self.local_stack().push(Value::I64(1));
                     }
-                    FCONST_2 =>{
-                        self.local_stack().push(Value::F32(2.0))
+                    FCONST_0 => {
+                        self.local_stack().push(Value::F32(0.0));
+                    }
+                    FCONST_1 => {
+                        self.local_stack().push(Value::F32(1.0));
+                    }
+                    FCONST_2 => {
+                        self.local_stack().push(Value::F32(2.0));
+                    }
+                    DCONST_0 => {
+                        self.local_stack().push(Value::F64(0.0));
+                    }
+                    DCONST_1 => {
+                        self.local_stack().push(Value::F64(1.0));
+                    }
+                    SIPUSH => {
+                        let s = read_u16(&code.opcodes, pc) as i32;
+                        self.local_stack().push(Value::I32(s));
                     }
                     BIPUSH => {
-                        let c = read_u8(&code.opcodes, pc);
-                        self.local_stack().push(Value::I32(c as i32));
+                        let c = read_u8(&code.opcodes, pc) as i32;
+                        self.local_stack().push(Value::I32(c));
                     }
                     LDC => {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
@@ -200,17 +216,33 @@ impl Vm {
                             }
                         }
                     }
-                    ILOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
+                    ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => { // omitting the type checks so far
+                        let n = read_u8(&code.opcodes, pc) as usize;
+                        self.local_stack().push_arc(args[n].clone());
+                    }
+                    ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
                         self.local_stack().push_arc(args[0].clone());
                     }
-                    ILOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
+                    ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
                         self.local_stack().push_arc(args[1].clone());
                     }
-                    ILOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
+                    ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
                         self.local_stack().push_arc(args[2].clone());
                     }
-                    ILOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
+                    ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
                         self.local_stack().push_arc(args[3].clone());
+                    }
+                    IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => {
+                        // TODO implement arrays
+                        // let index = self.local_stack().pop()?;
+                        // let array_ref = self.local_stack().pop()?;
+                    }
+                    ISTORE =>{
+                        let index = read_u8(&code.opcodes, pc);
+                        let value = self.local_stack().pop()?;
+                        if let Value::I32(int) = value {
+                            // TODO local vars
+                        }
                     }
                     POP => {
                         self.local_stack().pop().expect("Stack empty");

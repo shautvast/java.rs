@@ -11,7 +11,7 @@ pub struct Object {
     // hashcode: i32,
     pub class: Rc<Class>,
     pub data: HashMap<u16, Arc<UnsafeCell<Value>>>, //TODO optimize
-}
+}//arrays
 
 unsafe impl Send for Object {}
 
