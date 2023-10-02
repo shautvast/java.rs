@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Error;
 
 use crate::class::{AttributeType, Class, Value};
+use crate::class::AttributeType::Signature;
 use crate::class::Value::Void;
 use crate::classloader::{CpEntry, load_class};
 use crate::heap::{Heap, Object};
@@ -111,14 +112,14 @@ impl Vm {
             let stackframe = StackFrame::new(class_name, method_name);
             self.stack.push(stackframe);
 
-            let mut pc= &mut 0;
+            let mut pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
                 println!("opcode {} ", opcode);
                 match opcode {
                     BIPUSH => {
                         println!("BISPUSH");
-                        let c =read_u8(&code.opcodes, pc);
+                        let c = read_u8(&code.opcodes, pc);
                         self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(c as i32))));
                     }
                     LDC => {
@@ -161,7 +162,6 @@ impl Vm {
                                 panic!("unexpected")
                             }
                         }
-
                     }
                     FLOAD_0 => {
                         self.local_stack().push(args[0].clone());
@@ -257,15 +257,13 @@ impl Vm {
                     INVOKEVIRTUAL => {
                         let cp_index = read_u16(&code.opcodes, pc);
                         unsafe {
-                            if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                                let signature = method.0.as_str();
-                                let num_args = method.1;
-                                let mut args = Vec::with_capacity(num_args);
-                                for _ in 0..num_args {
+                            if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                                let mut args = Vec::with_capacity(invocation.method.num_args);
+                                for _ in 0..invocation.method.num_args {
                                     args.insert(0, self.local_stack().pop()?);
                                 }
                                 args.insert(0, self.local_stack().pop()?);
-                                let mut returnvalue = self.execute(class.as_str(), signature, args)?;
+                                let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
                                 match *returnvalue.get() {
                                     Void => {}
                                     _ => { self.local_stack().push(returnvalue.clone()); }
@@ -277,15 +275,13 @@ impl Vm {
                         println!("INVOKESPECIAL");
                         unsafe {
                             let cp_index = read_u16(&code.opcodes, pc);
-                            if let Some((class, method)) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                                let signature = method.0.as_str();
-                                let num_args = method.1;
-                                let mut args = vec![];
-                                for _ in 0..num_args {
+                            if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                                let mut args = Vec::with_capacity(invocation.method.num_args);
+                                for _ in 0..invocation.method.num_args {
                                     args.insert(0, self.local_stack().pop()?);
                                 }
                                 args.insert(0, self.local_stack().pop()?);
-                                let mut returnvalue = self.execute(class.as_str(), signature, args)?;
+                                let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
                                 match *returnvalue.get() {
                                     Void => {}
                                     _ => { self.local_stack().push(returnvalue.clone()); }
@@ -323,13 +319,26 @@ impl Vm {
 }
 
 
+struct Invocation {
+    class_name: String,
+    method: MethodSignature,
+}
+
+struct MethodSignature {
+    name: String,
+    num_args: usize,
+}
+
 //TODO refs with lifetime
-fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, (String, usize))> {
+fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
     if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
             if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
                 if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
-                    return Some((class_name.into(), method_signature));
+                    return Some(Invocation {
+                        class_name: class_name.into(),
+                        method: method_signature
+                    });
                 }
             }
         }
@@ -337,15 +346,14 @@ fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option
     None
 }
 
-fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<(String, usize)> {
+fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<MethodSignature> {
     if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
         if let CpEntry::Utf8(method_name) = cp.get(method_name_index).unwrap() {
             if let CpEntry::Utf8(signature) = cp.get(signature_index).unwrap() {
                 let mut method_signature: String = method_name.into();
                 let num_args = get_hum_args(signature);
                 method_signature.push_str(signature);
-
-                return Some((method_signature, num_args));
+                return Some(MethodSignature { name: method_signature, num_args });
             }
         }
     }
