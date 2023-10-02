@@ -6,7 +6,6 @@ use std::sync::Arc;
 use anyhow::Error;
 
 use crate::class::{AttributeType, Class, Value};
-use crate::class::AttributeType::Signature;
 use crate::class::Value::Void;
 use crate::classloader::{CpEntry, load_class};
 use crate::heap::{Heap, Object};
@@ -36,7 +35,6 @@ impl StackFrame {
     }
 }
 
-/// single threaded vm
 pub struct Vm {
     classpath: Vec<String>,
     classes: HashMap<String, Rc<Class>>,
@@ -44,8 +42,12 @@ pub struct Vm {
     stack: Vec<StackFrame>,
 }
 
+#[cfg(target_family="unix")]
 const CP_SEP: char = ':';
-//TODO semicolon on windows
+
+#[cfg(target_family="windows")]
+const CP_SEP: char = ';';
+
 
 impl Vm {
     fn local_stack(&mut self) -> &mut StackFrame {
