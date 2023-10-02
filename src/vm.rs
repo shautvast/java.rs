@@ -111,17 +111,15 @@ impl Vm {
             let stackframe = StackFrame::new(class_name, method_name);
             self.stack.push(stackframe);
 
-            let mut pc: usize = 0;
-            while pc < code.opcodes.len() {
-                let opcode = &code.opcodes[pc];
-                pc += 1;
+            let mut pc= &mut 0;
+            while *pc < code.opcodes.len() {
+                let opcode = read_u8(&code.opcodes, pc);
                 println!("opcode {} ", opcode);
                 match opcode {
                     BIPUSH => {
                         println!("BISPUSH");
-                        let c = code.opcodes[pc] as i32;
-                        self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(c))));
-                        pc += 1;
+                        let c =read_u8(&code.opcodes, pc);
+                        self.local_stack().push(Arc::new(UnsafeCell::new(Value::I32(c as i32))));
                     }
                     LDC => {
                         println!("LDC");
@@ -135,7 +133,6 @@ impl Vm {
                             }
                             _ => {}
                         }
-                        pc += 1;
                     }
                     LDC_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
@@ -150,7 +147,6 @@ impl Vm {
                                 panic!("unexpected")
                             }
                         }
-                        pc += 2;
                     }
                     LDC2_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
@@ -166,7 +162,6 @@ impl Vm {
                             }
                         }
 
-                        pc += 2;
                     }
                     FLOAD_0 => {
                         self.local_stack().push(args[0].clone());
@@ -241,7 +236,6 @@ impl Vm {
                                 }
                             }
                         }
-                        pc += 2;
                     }
                     PUTFIELD => {
                         println!("PUTFIELD");
@@ -259,7 +253,6 @@ impl Vm {
                                 }
                             }
                         }
-                        pc += 2;
                     }
                     INVOKEVIRTUAL => {
                         let cp_index = read_u16(&code.opcodes, pc);
@@ -279,7 +272,6 @@ impl Vm {
                                 }
                             }
                         }
-                        pc += 2;
                     }
                     INVOKESPECIAL => {
                         println!("INVOKESPECIAL");
@@ -300,7 +292,6 @@ impl Vm {
                                 }
                             }
                         }
-                        pc += 2;
                     }
                     NEW => {
                         let class_index = read_u16(&code.opcodes, pc);
@@ -318,7 +309,6 @@ impl Vm {
                                 self.heap.new_object(object);
                             }
                         }
-                        pc += 2;
                     }
                     //TODO implement all opcodes
                     _ => {

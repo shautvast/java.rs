@@ -5,26 +5,26 @@
 // pub const dconst_0:u8 = 14; // (0xe) push double 0
 // pub const dconst_1:u8 = 15; // (0xf) push double 1
 // TODO turn all into references
-pub const BIPUSH: &u8 = &16; // (0x10) Push byte
-pub const LDC: &u8 = &18; // (0x12) Push item from run-time pub constant pool
-pub const LDC_W: &u8 = &19; // (0x13) Push item from run-time constant pool (wide index)
-pub const LDC2_W: &u8 = &20; // (0x14) Push long or double from run-time constant pool (wide index)
+pub const BIPUSH: u8 = 16; // (0x10) Push byte
+pub const LDC: u8 = 18; // (0x12) Push item from run-time pub constant pool
+pub const LDC_W: u8 = 19; // (0x13) Push item from run-time constant pool (wide index)
+pub const LDC2_W: u8 = 20; // (0x14) Push long or double from run-time constant pool (wide index)
 // pub const fload:u8 = 23; // (0x17) Load float from local variable
 // pub const dload:u8 = 24; // (0x18) load double from local variable
 // pub const aload:u8 = 25; //0x19
 //
-pub const FLOAD_0: &u8 = &34; // (0x22) Load float from local variable 0
-pub const FLOAD_1: &u8 = &35; // (0x23) Load float from local variable 1
-pub const FLOAD_2: &u8 = &36; // (0x24) Load float from local variable 2
-pub const FLOAD_3: &u8 = &37; // (0x25) Load float from local variable 3
+pub const FLOAD_0: u8 = 34; // (0x22) Load float from local variable 0
+pub const FLOAD_1: u8 = 35; // (0x23) Load float from local variable 1
+pub const FLOAD_2: u8 = 36; // (0x24) Load float from local variable 2
+pub const FLOAD_3: u8 = 37; // (0x25) Load float from local variable 3
 // pub const dload_0:u8 = 38; //  (0x26) Load double 0 from local variable
 // pub const dload_1:u8 = 39; //  (0x27) Load double 1 from local variable
 // pub const dload_2:u8 = 40; //  (0x28) Load double 2 from local variable
 // pub const dload_3:u8 = 41; // (0x29) Load double 3 from local variable
-pub const ALOAD_0: &u8 = &42; // (0x2a)
-pub const ALOAD_1: &u8 = &43;// (0x2a)
-pub const ALOAD_2: &u8 = &44;// (0x2b)
-pub const ALOAD_3: &u8 = &45;// (0x2c)
+pub const ALOAD_0: u8 = 42; // (0x2a)
+pub const ALOAD_1: u8 = 43;// (0x2a)
+pub const ALOAD_2: u8 = 44;// (0x2b)
+pub const ALOAD_3: u8 = 45;// (0x2c)
 
 // pub const faload: u8 = 48; // (0x30) Load float from array
 // pub const daload:u8 = 49; // (0x31) load double from array
@@ -51,8 +51,8 @@ pub const ALOAD_3: &u8 = &45;// (0x2c)
 // pub const bastore:u8 = 84; // (0x54)
 //
 // pub const castore:u8 = 85; // (0x55)
-pub const POP: &u8 = &87; // (0x57) Pop the top operand stack value
-pub const DUP: &u8 = &89; // (0x59) duplicate the top operand stack value
+pub const POP: u8 = 87; // (0x57) Pop the top operand stack value
+pub const DUP: u8 = 89; // (0x59) duplicate the top operand stack value
 // pub const dup_x1: u8 = 90; // (0x5a) Duplicate the top operand stack value and insert two values down
 // pub const dup_x2: u8 = 91; // (0x5b) Duplicate the top operand stack value and insert two or three values down
 // pub const dup2: u8 = 92; // (0x5c) Duplicate the top one or two operand stack values
@@ -82,18 +82,18 @@ pub const DUP: &u8 = &89; // (0x59) duplicate the top operand stack value
 // pub const dcmpl:u8 = 151; // (0x97) compare double (less than)
 // pub const dcmpg:u8 = 152; // (0x98) compare double (greater than)
 //
-pub const IRETURN: &u8 = &172; // (0xac) ireturn
-pub const FRETURN: &u8 = &174; // (0xae) Return float from method
-pub const DRETURN: &u8 = &175; // (0xaf) Return double from method
+pub const IRETURN: u8 = 172; // (0xac) ireturn
+pub const FRETURN: u8 = 174; // (0xae) Return float from method
+pub const DRETURN: u8 = 175; // (0xaf) Return double from method
   // pub const areturn: u8 = 176; //(0xb0) return reference
-pub const RETURN_VOID: &u8 = &177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
+pub const RETURN_VOID: u8 = 177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
   // pub const getstatic: u8 = 178; // (0xb2) Get static field from class
-pub const GETFIELD: &u8 = &180; // (0xb4) Fetch field from object3
-pub const PUTFIELD: &u8 = &181; // (0xb5) Set field in object
-pub const INVOKEVIRTUAL: &u8 = &182; // (0xb6) Invoke instance method; dispatch based on class
-pub const NEW: &u8 = &187; // (0xbb) Create new object
+pub const GETFIELD: u8 = 180; // (0xb4) Fetch field from object3
+pub const PUTFIELD: u8 = 181; // (0xb5) Set field in object
+pub const INVOKEVIRTUAL: u8 = 182; // (0xb6) Invoke instance method; dispatch based on class
+pub const NEW: u8 = 187; // (0xbb) Create new object
 //
-pub const INVOKESPECIAL: &u8 = &183; // (0xb7) // nvoke instance method; direct invocation of instance initialization methods and methods of the current class and its supertypes
+pub const INVOKESPECIAL: u8 = 183; // (0xb7) // nvoke instance method; direct invocation of instance initialization methods and methods of the current class and its supertypes
         // pub const anewarray: u8 = 189; // (0xbd)
         //
         // pub const arraylength: u8 = 190; // (0xbe)

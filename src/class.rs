@@ -217,12 +217,12 @@ pub struct Exception {
 }
 
 impl Exception {
-    pub fn read(code: &[u8], index: usize) -> Self {
+    pub fn read(code: &[u8], index: &mut usize) -> Self {
         Self {
             start_pc: read_u16(code, index),
-            end_pc: read_u16(code, index + 2),
-            handler_pc: read_u16(code, index + 4),
-            catch_type: read_u16(code, index + 6),
+            end_pc: read_u16(code, index),
+            handler_pc: read_u16(code, index),
+            catch_type: read_u16(code, index),
         }
     }
 }
