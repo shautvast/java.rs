@@ -237,9 +237,9 @@ impl Vm {
                         // let index = self.local_stack().pop()?;
                         // let array_ref = self.local_stack().pop()?;
                     }
-                    ISTORE =>{
+                    ISTORE => unsafe{
                         let index = read_u8(&code.opcodes, pc);
-                        let value = self.local_stack().pop()?;
+                        let value = &*(self.local_stack().pop()?.get());
                         if let Value::I32(int) = value {
                             // TODO local vars
                         }
