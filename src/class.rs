@@ -1,6 +1,6 @@
 use std::cell::{RefCell, UnsafeCell};
 use crate::classloader::CpEntry;
-use crate::heap::Object;
+use crate::heap::{Object, ObjectRef};
 use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use std::fmt;
@@ -265,7 +265,7 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
-    Ref(Arc<UnsafeCell<Object>>),
+    Ref(Arc<UnsafeCell<ObjectRef>>),
 }
 
 unsafe impl Send for Value {}

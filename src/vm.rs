@@ -8,7 +8,7 @@ use anyhow::Error;
 use crate::class::{AttributeType, Class, Value};
 use crate::class::Value::Void;
 use crate::classloader::{CpEntry, load_class};
-use crate::heap::{Heap, Object};
+use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
 use crate::opcodes::*;
 
@@ -237,11 +237,13 @@ impl Vm {
                         // let index = self.local_stack().pop()?;
                         // let array_ref = self.local_stack().pop()?;
                     }
-                    ISTORE => unsafe{
-                        let index = read_u8(&code.opcodes, pc);
-                        let value = &*(self.local_stack().pop()?.get());
-                        if let Value::I32(int) = value {
-                            // TODO local vars
+                    ISTORE => {
+                        unsafe {
+                            let index = read_u8(&code.opcodes, pc);
+                            let value = self.local_stack().pop()?;
+                            if let Value::I32(int) = *value.get() {
+                                // TODO local vars
+                            }
                         }
                     }
                     POP => {
@@ -270,8 +272,11 @@ impl Vm {
                                     if let CpEntry::NameAndType(name, _) =
                                         method.constant_pool.get(name_and_type_index).unwrap()
                                     {
-                                        let value = (*(*instance).get()).data.get(name).unwrap();
-                                        self.local_stack().push_arc(Arc::clone(value));
+                                        let objectref = &(*instance.get());
+                                        if let ObjectRef::Object(object) = objectref {
+                                            let value = object.data.get(name).unwrap();
+                                            self.local_stack().push_arc(Arc::clone(value));
+                                        }
                                     }
                                 }
                             }
@@ -285,9 +290,13 @@ impl Vm {
                             {
                                 if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
                                     let value = self.local_stack().pop()?;
-                                    let mut objectref = &*self.local_stack().pop()?.get();
-                                    if let Value::Ref(instance) = objectref {
-                                        (*(*instance).get()).data.insert(*name_index, value);
+                                    let mut objectref = self.local_stack().pop()?;
+                                    if let Value::Ref(instance) = &mut *objectref.get() {
+                                        if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
+                                            object.data.insert(*name_index, value);
+                                        } else {
+                                            panic!("not an object, maybe array");
+                                        }
                                     }
                                 }
                             }
@@ -338,7 +347,7 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Arc::new(UnsafeCell::new(self.new_instance(class)));
+                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(self.new_instance(class))));
                                 self.local_stack().push(Value::Ref(Arc::clone(&object)));
                                 self.heap.new_object(object);
                             }

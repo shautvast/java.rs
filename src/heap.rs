@@ -13,6 +13,20 @@ pub struct Object {
     pub data: HashMap<u16, Arc<UnsafeCell<Value>>>, //TODO optimize
 }//arrays
 
+#[derive(Debug)]
+pub enum ObjectRef{
+    ByteArray(Vec<i8>),
+    ShortArray(Vec<i16>),
+    IntArray(Vec<i32>),
+    LongArray(Vec<i64>),
+    FloatArray(Vec<f32>),
+    DoubleArray(Vec<f64>),
+    BooleanArray(Vec<bool>),
+    CharArray(Vec<char>),
+    ObjectArray(Vec<Object>),
+    Object(Object),
+}
+
 unsafe impl Send for Object {}
 
 unsafe impl Sync for Object {}
@@ -52,7 +66,7 @@ impl fmt::Debug for Object {
 }
 
 pub(crate) struct Heap {
-    objects: Vec<Arc<UnsafeCell<Object>>>,
+    objects: Vec<Arc<UnsafeCell<ObjectRef>>>,
 }
 
 impl Heap {
@@ -60,7 +74,7 @@ impl Heap {
         Self { objects: vec![] }
     }
 
-    pub(crate) fn new_object(&mut self, object: Arc<UnsafeCell<Object>>) {
+    pub(crate) fn new_object(&mut self, object: Arc<UnsafeCell<ObjectRef>>) {
         self.objects.push(object);
     }
 }
