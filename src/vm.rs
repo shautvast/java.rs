@@ -111,6 +111,7 @@ impl Vm {
         method_name: &str,
         args: Vec<Arc<UnsafeCell<Value>>>,
     ) -> Result<Arc<UnsafeCell<Value>>, Error> {
+        let mut local_params: Vec<Option<Arc<UnsafeCell<Value>>>> = args.clone().iter().map(|e| Some(e.clone())).collect();
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
@@ -237,20 +238,38 @@ impl Vm {
                         // let index = self.local_stack().pop()?;
                         // let array_ref = self.local_stack().pop()?;
                     }
-                    ISTORE => {
-                        unsafe {
-                            let index = read_u8(&code.opcodes, pc);
-                            let value = self.local_stack().pop()?;
-                            if let Value::I32(int) = *value.get() {
-                                // TODO local vars
+                    ISTORE | LSTORE | FSTORE | DSTORE | ASTORE => {
+                        let index = read_u8(&code.opcodes, pc) as usize;
+                        self.store(&mut local_params, index)?;
+                    }
+                    ISTORE_0 | LSTORE_0 | DSTORE_0 | ASTORE_0 | FSTORE_0 => {
+                        self.store(&mut local_params, 0)?;
+                    }
+                    ISTORE_1 | LSTORE_1 | DSTORE_1 | ASTORE_1 | FSTORE_1 => {
+                        self.store(&mut local_params, 1)?;
+                    }
+                    ISTORE_2 | LSTORE_2 | DSTORE_2 | ASTORE_2 | FSTORE_2 => {
+                        self.store(&mut local_params, 2)?;
+                    }
+                    ISTORE_3 | LSTORE_3 | DSTORE_3 | ASTORE_3 | FSTORE_3 => {
+                        self.store(&mut local_params, 3)?;
+                    }
+                    FASTORE => unsafe {
+                        if let Value::F32(value) = *self.local_stack().pop()?.get() {
+                            if let Value::I32(index) = &mut *self.local_stack().pop()?.get() {
+                                if let Value::Ref(ref mut objectref) = &mut *self.local_stack().pop()?.get() {
+                                    if let ObjectRef::FloatArray(ref mut array) = &mut *objectref.get() {
+                                        array[*index as usize] = value;
+                                    }
+                                }
                             }
                         }
                     }
                     POP => {
-                        self.local_stack().pop().expect("Stack empty");
+                        self.local_stack().pop()?;
                     }
                     DUP => {
-                        let value = self.local_stack().pop().expect("Stack empty");
+                        let value = self.local_stack().pop()?;
                         println!("{:?}", value);
                         self.local_stack().push_arc(value.clone());
                         self.local_stack().push_arc(value);
@@ -282,57 +301,51 @@ impl Vm {
                             }
                         }
                     }
-                    PUTFIELD => {
-                        unsafe {
-                            let cp_index = read_u16(&code.opcodes, pc);
-                            if let CpEntry::Fieldref(_class_index, name_and_type_index) =
-                                method.constant_pool.get(&cp_index).unwrap()
-                            {
-                                if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
-                                    let value = self.local_stack().pop()?;
-                                    let mut objectref = self.local_stack().pop()?;
-                                    if let Value::Ref(instance) = &mut *objectref.get() {
-                                        if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
-                                            object.data.insert(*name_index, value);
-                                        } else {
-                                            panic!("not an object, maybe array");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    INVOKEVIRTUAL => {
+                    PUTFIELD => unsafe {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        unsafe {
-                            if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                                let mut args = Vec::with_capacity(invocation.method.num_args);
-                                for _ in 0..invocation.method.num_args {
-                                    args.insert(0, self.local_stack().pop()?);
-                                }
-                                args.insert(0, self.local_stack().pop()?);
-                                let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
-                                match *returnvalue.get() {
-                                    Void => {}
-                                    _ => { self.local_stack().push_arc(returnvalue.clone()); }
-                                }
+                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
+                            method.constant_pool.get(&cp_index).unwrap()
+                        {
+                            if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
+                                let value = self.local_stack().pop()?;
+                                let mut objectref = self.local_stack().pop()?;
+                                if let Value::Ref(instance) = &mut *objectref.get() {
+                                    if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
+                                        object.data.insert(*name_index, value);
+                                    } else {
+                                        panic!("not an object, maybe array");
+                                    }
+                                } // else?
                             }
                         }
                     }
-                    INVOKESPECIAL => {
-                        unsafe {
-                            let cp_index = read_u16(&code.opcodes, pc);
-                            if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                                let mut args = Vec::with_capacity(invocation.method.num_args);
-                                for _ in 0..invocation.method.num_args {
-                                    args.insert(0, self.local_stack().pop()?);
-                                }
+                    INVOKEVIRTUAL => unsafe {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                            let mut args = Vec::with_capacity(invocation.method.num_args);
+                            for _ in 0..invocation.method.num_args {
                                 args.insert(0, self.local_stack().pop()?);
-                                let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
-                                match *returnvalue.get() {
-                                    Void => {}
-                                    _ => { self.local_stack().push_arc(returnvalue.clone()); }
-                                }
+                            }
+                            args.insert(0, self.local_stack().pop()?);
+                            let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
+                            match *returnvalue.get() {
+                                Void => {}
+                                _ => { self.local_stack().push_arc(returnvalue.clone()); }
+                            }
+                        }
+                    }
+                    INVOKESPECIAL => unsafe {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                            let mut args = Vec::with_capacity(invocation.method.num_args);
+                            for _ in 0..invocation.method.num_args {
+                                args.insert(0, self.local_stack().pop()?);
+                            }
+                            args.insert(0, self.local_stack().pop()?);
+                            let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
+                            match *returnvalue.get() {
+                                Void => {}
+                                _ => { self.local_stack().push_arc(returnvalue.clone()); }
                             }
                         }
                     }
@@ -362,6 +375,15 @@ impl Vm {
             }
         }
         panic!("should not happen")
+    }
+
+    fn store(&mut self, local_params: &mut Vec<Option<Arc<UnsafeCell<Value>>>>, index: usize) -> Result<(), Error> {
+        let value = self.local_stack().pop()?;
+        while local_params.len() < index + 1 {
+            local_params.push(None);
+        }
+        local_params[index] = Some(value.clone());
+        Ok(())
     }
 }
 

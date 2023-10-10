@@ -256,9 +256,8 @@ impl MethodCode {
 
 #[derive(Debug)]
 pub enum Value {
-    Void,
-    Null,
-    // the $1_000_000 mistake
+    Void, // variant returned for void methods
+    Null, // 'pointer' to nothing
     I32(i32),
     I64(i64),
     F32(f32),
