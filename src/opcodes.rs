@@ -77,13 +77,14 @@ pub const ASTORE_0: u8 = 75; // (0x4b)
 pub const ASTORE_1: u8 = 76; // (0x4c)
 pub const ASTORE_2: u8 = 77; // (0x4d)
 pub const ASTORE_3: u8 = 78; // (0x4e)
+pub const IASTORE: u8 = 79; // (0x4f) Store into int array
+pub const LASTORE: u8 = 80; // (0x50) Store into long array
 pub const FASTORE: u8 = 81; // (0x51) Store into float array
-// pub const dastore:u8 = 82; //(0x52) store into double array
-// pub const aastore: u8 = 83; // (0x53)
-//
-// pub const bastore:u8 = 84; // (0x54)
-//
-// pub const castore:u8 = 85; // (0x55)
+pub const DASTORE: u8 = 82; //(0x52) store into double array
+pub const AASTORE: u8 = 83; // (0x53) Store into object array
+pub const BASTORE:u8 = 84; // (0x54) Store into byte or boolean array
+pub const CASTORE:u8 = 85; // (0x55) Store into char array
+pub const SASTORE:u8 = 86; // (0x56) Store into short array
 pub const POP: u8 = 87; // (0x57) Pop the top operand stack value
 pub const DUP: u8 = 89; // (0x59) duplicate the top operand stack value
 // pub const dup_x1: u8 = 90; // (0x5a) Duplicate the top operand stack value and insert two values down

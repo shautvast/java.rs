@@ -23,9 +23,10 @@ pub enum ObjectRef{
     DoubleArray(Vec<f64>),
     BooleanArray(Vec<bool>),
     CharArray(Vec<char>),
-    ObjectArray(Vec<Object>),
+    ObjectArray(Vec<Arc<UnsafeCell<ObjectRef>>>),
     Object(Object),
 }
+
 
 unsafe impl Send for Object {}
 
