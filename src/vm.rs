@@ -348,7 +348,7 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(self.new_instance(class))));
+                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(self.new_instance(class)))));
                                 self.local_stack().push(Value::Ref(Arc::clone(&object)));
                                 self.heap.new_object(object);
                             }

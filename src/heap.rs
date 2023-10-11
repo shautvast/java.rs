@@ -25,7 +25,7 @@ pub enum ObjectRef{
     BooleanArray(Vec<bool>),
     CharArray(Vec<char>),
     ObjectArray(Vec<Arc<UnsafeCell<ObjectRef>>>),
-    Object(Object),
+    Object(Box<Object>),
 }
 
 
