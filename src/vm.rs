@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 
 use crate::class::{AttributeType, Class, Value};
 use crate::class::Value::Void;
@@ -368,7 +368,11 @@ impl Vm {
     unsafe fn array_load(&mut self) -> Result<(), Error> {
         if let Value::I32(index) = &*self.local_stack().pop()?.get() {
             let index = *index as usize;
-            if let Value::Ref(ref objectref) = &*self.local_stack().pop()?.get() {
+            let arrayref = &*self.local_stack().pop()?.get();
+            if let Value::Null = arrayref {
+                return Err(anyhow!("NullpointerException"));
+            }
+            if let Value::Ref(ref objectref) = arrayref {
                 match &*objectref.get() {
                     ObjectRef::ByteArray(ref array) => {
                         self.local_stack().push(Value::I32(array[index] as i32));
@@ -405,53 +409,59 @@ impl Vm {
     }
 
     unsafe fn array_store(&mut self) -> Result<(), Error> {
-        let element = self.local_stack().pop()?;
+        let value = self.local_stack().pop()?;
+        let index = &mut *self.local_stack().pop()?.get();
+        let mut arrayref = &mut *self.local_stack().pop()?.get();
 
-        if let Value::I32(index) = &mut *self.local_stack().pop()?.get() {
-            if let Value::Ref(ref mut objectref) = &mut *self.local_stack().pop()?.get() {
+        if let Value::Null = arrayref {
+            return Err(anyhow!("NullpointerException"));
+        }
+
+        if let Value::I32(index) = index {
+            if let Value::Ref(ref mut objectref) = arrayref {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
-                        if let Value::I32(value) = *element.get() { // is i32 correct?
+                        if let Value::I32(value) = *value.get() { // is i32 correct?
                             array[*index as usize] = value as i8;
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
-                        if let Value::I32(value) = *element.get() { // is i32 correct?
+                        if let Value::I32(value) = *value.get() { // is i32 correct?
                             array[*index as usize] = value as i16;
                         }
                     }
                     ObjectRef::IntArray(ref mut array) => {
-                        if let Value::I32(value) = *element.get() {
+                        if let Value::I32(value) = *value.get() {
                             array[*index as usize] = value;
                         }
                     }
                     ObjectRef::BooleanArray(ref mut array) => {
-                        if let Value::I32(value) = *element.get() {
+                        if let Value::I32(value) = *value.get() {
                             array[*index as usize] = value > 0;
                         }
                     }
                     ObjectRef::CharArray(ref mut array) => {
-                        if let Value::I32(value) = *element.get() {
+                        if let Value::I32(value) = *value.get() {
                             array[*index as usize] = char::from_u32_unchecked(value as u32);
                         }
                     }
                     ObjectRef::LongArray(ref mut array) => {
-                        if let Value::I64(value) = *element.get() {
+                        if let Value::I64(value) = *value.get() {
                             array[*index as usize] = value;
                         }
                     }
                     ObjectRef::FloatArray(ref mut array) => {
-                        if let Value::F32(value) = *element.get() {
+                        if let Value::F32(value) = *value.get() {
                             array[*index as usize] = value
                         }
                     }
                     ObjectRef::DoubleArray(ref mut array) => {
-                        if let Value::F64(value) = *element.get() {
+                        if let Value::F64(value) = *value.get() {
                             array[*index as usize] = value
                         }
                     }
                     ObjectRef::ObjectArray(ref mut array) => {
-                        if let Value::Ref(ref value) = *element.get() {
+                        if let Value::Ref(ref value) = *value.get() {
                             array[*index as usize] = value.clone();
                         }
                     }
