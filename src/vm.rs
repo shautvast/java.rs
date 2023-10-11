@@ -254,7 +254,7 @@ impl Vm {
                     ISTORE_3 | LSTORE_3 | DSTORE_3 | ASTORE_3 | FSTORE_3 => {
                         self.store(&mut local_params, 3)?;
                     }
-                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => unsafe { self.arraystore()? }
+                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => unsafe { self.array_store()? }
                     POP => {
                         self.local_stack().pop()?;
                     }
@@ -367,58 +367,58 @@ impl Vm {
         panic!("should not happen")
     }
 
-    unsafe fn arraystore(&mut self) -> Result<(), Error> {
-        let eleemnt = self.local_stack().pop()?;
+    unsafe fn array_store(&mut self) -> Result<(), Error> {
+        let element = self.local_stack().pop()?;
 
         if let Value::I32(index) = &mut *self.local_stack().pop()?.get() {
             if let Value::Ref(ref mut objectref) = &mut *self.local_stack().pop()?.get() {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
-                        if let Value::I32(value) = *eleemnt.get() { // is i32 correct?
+                        if let Value::I32(value) = *element.get() { // is i32 correct?
                             array[*index as usize] = value as i8;
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
-                        if let Value::I32(value) = *eleemnt.get() { // is i32 correct?
+                        if let Value::I32(value) = *element.get() { // is i32 correct?
                             array[*index as usize] = value as i16;
                         }
                     }
                     ObjectRef::IntArray(ref mut array) => {
-                        if let Value::I32(value) = *eleemnt.get() {
+                        if let Value::I32(value) = *element.get() {
                             array[*index as usize] = value;
                         }
                     }
                     ObjectRef::BooleanArray(ref mut array) => {
-                        if let Value::I32(value) = *eleemnt.get() {
+                        if let Value::I32(value) = *element.get() {
                             array[*index as usize] = value > 0;
                         }
                     }
                     ObjectRef::CharArray(ref mut array) => {
-                        if let Value::I32(value) = *eleemnt.get() {
+                        if let Value::I32(value) = *element.get() {
                             array[*index as usize] = char::from_u32_unchecked(value as u32);
                         }
                     }
                     ObjectRef::LongArray(ref mut array) => {
-                        if let Value::I64(value) = *eleemnt.get() {
+                        if let Value::I64(value) = *element.get() {
                             array[*index as usize] = value;
                         }
                     }
                     ObjectRef::FloatArray(ref mut array) => {
-                        if let Value::F32(value) = *eleemnt.get() {
+                        if let Value::F32(value) = *element.get() {
                             array[*index as usize] = value
                         }
                     }
                     ObjectRef::DoubleArray(ref mut array) => {
-                        if let Value::F64(value) = *eleemnt.get() {
+                        if let Value::F64(value) = *element.get() {
                             array[*index as usize] = value
                         }
                     }
                     ObjectRef::ObjectArray(ref mut array) => {
-                        if let Value::Ref(ref value) = *eleemnt.get() {
+                        if let Value::Ref(ref value) = *element.get() {
                             array[*index as usize] = value.clone();
                         }
                     }
-                    ObjectRef::Object(_) => {}
+                    ObjectRef::Object(_) => {}//throw error?
                 }
             }
         }
