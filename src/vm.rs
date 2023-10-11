@@ -219,19 +219,19 @@ impl Vm {
                     }
                     ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => { // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
-                        self.local_stack().push_arc(args[n].clone());
+                        self.local_stack().push_arc(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
-                        self.local_stack().push_arc(args[0].clone());
+                        self.local_stack().push_arc(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
-                        self.local_stack().push_arc(args[1].clone());
+                        self.local_stack().push_arc(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
-                        self.local_stack().push_arc(args[2].clone());
+                        self.local_stack().push_arc(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
-                        self.local_stack().push_arc(args[3].clone());
+                        self.local_stack().push_arc(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
                         self.array_load()?;
@@ -357,7 +357,7 @@ impl Vm {
                     //TODO implement all opcodes
                     _ => {
                         panic!("opcode not implemented {:?}", self.stack)
-                        //TODO implement proper stacktraces
+                        //TODO implement proper --stacktraces-- error handling
                     }
                 }
             }
@@ -493,7 +493,6 @@ struct MethodSignature {
     num_args: usize,
 }
 
-//TODO refs with lifetime
 fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
     if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
