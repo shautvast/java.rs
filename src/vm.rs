@@ -418,6 +418,7 @@ impl Vm {
                             array[*index as usize] = value.clone();
                         }
                     }
+                    ObjectRef::Object(_) => {}
                 }
             }
         }

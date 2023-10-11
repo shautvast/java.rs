@@ -1,9 +1,10 @@
-use std::cell::{RefCell, UnsafeCell};
-use crate::class::{Class, Value};
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use crate::class::{Class, Value};
 use crate::classloader::CpEntry;
 
 pub struct Object {
