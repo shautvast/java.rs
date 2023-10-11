@@ -233,10 +233,8 @@ impl Vm {
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
                         self.local_stack().push_arc(args[3].clone());
                     }
-                    IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => {
-                        // TODO implement arrays
-                        // let index = self.local_stack().pop()?;
-                        // let array_ref = self.local_stack().pop()?;
+                    IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
+                        self.array_load()?;
                     }
                     ISTORE | LSTORE | FSTORE | DSTORE | ASTORE => {
                         let index = read_u8(&code.opcodes, pc) as usize;
@@ -365,6 +363,45 @@ impl Vm {
             }
         }
         panic!("should not happen")
+    }
+
+    unsafe fn array_load(&mut self) -> Result<(), Error> {
+        if let Value::I32(index) = &*self.local_stack().pop()?.get() {
+            let index = *index as usize;
+            if let Value::Ref(ref objectref) = &*self.local_stack().pop()?.get() {
+                match &*objectref.get() {
+                    ObjectRef::ByteArray(ref array) => {
+                        self.local_stack().push(Value::I32(array[index] as i32));
+                    }
+                    ObjectRef::ShortArray(ref array) => {
+                        self.local_stack().push(Value::I32(array[index] as i32));
+                    }
+                    ObjectRef::IntArray(ref array) => {
+                        self.local_stack().push(Value::I32(array[index]));
+                    }
+                    ObjectRef::BooleanArray(ref array) => {
+                        self.local_stack().push(Value::I32(array[index] as i32));
+                    }
+                    ObjectRef::CharArray(ref array) => {
+                        self.local_stack().push(Value::CHAR(array[index]));
+                    }
+                    ObjectRef::LongArray(ref array) => {
+                        self.local_stack().push(Value::I64(array[index]));
+                    }
+                    ObjectRef::FloatArray(ref array) => {
+                        self.local_stack().push(Value::F32(array[index]));
+                    }
+                    ObjectRef::DoubleArray(ref array) => {
+                        self.local_stack().push(Value::F64(array[index]));
+                    }
+                    ObjectRef::ObjectArray(ref array) => {
+                        self.local_stack().push(Value::Ref(array.get(index).unwrap().clone()));
+                    }
+                    ObjectRef::Object(_) => {} //throw error?
+                }
+            }
+        }
+        Ok(())
     }
 
     unsafe fn array_store(&mut self) -> Result<(), Error> {
