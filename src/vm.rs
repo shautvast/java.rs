@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
+use once_cell::unsync::Lazy;
 
 use crate::class::{AttributeType, Class, Value};
 use crate::class::Value::Void;
@@ -18,6 +19,7 @@ struct StackFrame {
     data: Vec<Arc<UnsafeCell<Value>>>,
 }
 
+// maybe just call frame
 impl StackFrame {
     fn new(at_class: &str, at_method: &str) -> Self {
         let mut at: String = at_class.into();
@@ -39,9 +41,11 @@ impl StackFrame {
     }
 }
 
+//trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
+static mut CLASSDEFS: Lazy<HashMap<String, Rc<Class>>> = Lazy::new(|| HashMap::new()); //TODO add mutex...and Arc most likely
+
 pub struct Vm {
     classpath: Vec<String>,
-    classes: HashMap<String, Rc<Class>>,
     heap: Heap,
     stack: Vec<StackFrame>,
 }
@@ -52,7 +56,7 @@ const PATH_SEPARATOR: char = ':';
 #[cfg(target_family = "windows")]
 const PATH_SEPARATOR: char = ';';
 
-
+// The singlethreaded VM (maybe a future Thread)
 impl Vm {
     fn local_stack(&mut self) -> &mut StackFrame {
         let i = self.stack.len() - 1;
@@ -62,49 +66,51 @@ impl Vm {
     pub fn new(classpath: &'static str) -> Self {
         Self {
             classpath: classpath.split(PATH_SEPARATOR).map(|s| s.to_owned()).collect(),
-            classes: HashMap::new(),
             heap: Heap::new(),
             stack: vec![],
         }
     }
 
-    /// parse the binary data into a Class struct
-    /// gets the file from cache, or reads it from classpath
-    /// Vm keeps ownership of the class and hands out Arc references to it
-    pub fn get_class(&mut self, class_name: &str) -> Result<Rc<Class>, Error> {
+    // parse the binary data into a Class struct
+    // gets the file from cache, or reads it from classpath
+    // Vm keeps ownership of the class and hands out Arc references to it
+    pub fn get_class(&self, class_name: &str) -> Result<Rc<Class>, Error> {
         println!("get_class {}", class_name);
-        let entry = self.classes.entry(class_name.into());
-        let entry = entry.or_insert_with(|| {
-            // print!("read class {} ", class_name);
-            let resolved_path = find_class(&self.classpath, class_name).expect("Class not found");
-            // println!("full path {}", resolved_path);
-            let bytecode = read_bytecode(resolved_path).unwrap();
-            Rc::new(load_class(bytecode).unwrap())
-        });
-        Ok(entry.clone())
+        unsafe {
+            let entry = CLASSDEFS.entry(class_name.into());
+            let entry = entry.or_insert_with(|| {
+                // print!("read class {} ", class_name);
+                let resolved_path = find_class(&self.classpath, class_name).unwrap();
+                // println!("full path {}", resolved_path);
+                let bytecode = read_bytecode(resolved_path).unwrap();
+                let mut class = load_class(bytecode).unwrap();
+                let super_class_name = class.super_class_name.as_ref();
+                if let Some(super_class_name) = super_class_name {
+                    if let Ok(super_class) = self.get_class(&super_class_name) {
+                        class.super_class = Some(super_class.clone());
+                    }
+                }
+                class.initialize();
+
+                Rc::new(class)
+            });
+            Ok(entry.clone())
+        }
     }
 
-    pub fn new_instance(&self, class: Rc<Class>) -> Object {
-        //TODO add fields from superclasses
-        let mut data = HashMap::new();
-        for f in &class.fields {
-            let value = match f.type_of().as_str() {
-                "Z" => Value::BOOL(false),
-                "B" => Value::I32(0),
-                "S" => Value::I32(0),
-                "I" => Value::I32(0),
-                "J" => Value::I64(0),
-                "F" => Value::F32(0.0),
-                "D" => Value::F64(0.0),
-                "L" => Value::Null,
-                _ => Value::Void,
-            };
-            data.insert(f.name_index, Arc::new(UnsafeCell::new(value)));
-        }
-        Object::new(class.clone(), data)
+    pub fn new_instance(class: Rc<Class>) -> Object {
+        let mut class = class;
+        // let mut outer = HashMap::new();
+        //TODO
+
+        let mut instance = Object::new(class.clone());
+        instance.init_fields();
+        instance
     }
+
 
     /// execute the bytecode
+    /// contains unsafe, as I think that mimics not-synchronized memory access in the original JVM
     pub fn execute(
         &mut self,
         class_name: &str,
@@ -269,41 +275,45 @@ impl Vm {
                         self.stack.pop(); // Void is also returned as a value
                         return Ok(Arc::new(UnsafeCell::new(Void)));
                     }
+                    GETSTATIC => {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        let (class_index, _field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
+                        let class_name_index = class.get_class_ref(class_index).unwrap();
+                        let class_name = class.get_utf8(class_name_index).unwrap();
+                        let class = self.get_class(class_name.as_str())?;
+                        println!("{:?}", class); //TODO
+                    }
                     GETFIELD => {
                         unsafe {
                             let cp_index = read_u16(&code.opcodes, pc);
-                            if let CpEntry::Fieldref(_class_index, name_and_type_index) =
-                                method.constant_pool.get(&cp_index).unwrap()
-                            {
-                                if let Value::Ref(instance) = &*self.local_stack().pop()?.get() {
-                                    if let CpEntry::NameAndType(name, _) =
-                                        method.constant_pool.get(name_and_type_index).unwrap()
-                                    {
-                                        let objectref = &(*instance.get());
-                                        if let ObjectRef::Object(object) = objectref {
-                                            let value = object.data.get(name).unwrap();
-                                            self.local_stack().push_arc(Arc::clone(value));
-                                        }
-                                    }
+                            let (class_index, field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
+                            let (field_name_index, _) = class.get_name_and_type(field_name_and_type_index).unwrap();
+                            let class_name_index = class.get_class_ref(class_index).unwrap();
+                            let class_name = class.get_utf8(class_name_index).unwrap();
+                            let field_name = class.get_utf8(field_name_index).unwrap();
+
+                            let mut objectref = self.local_stack().pop()?;
+                            if let Value::Ref(instance) = &mut *objectref.get() {
+                                if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
+                                    let value = object.get(class_name, field_name);
+                                    self.local_stack().push_arc(Arc::clone(value));
                                 }
                             }
                         }
                     }
                     PUTFIELD => unsafe {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let CpEntry::Fieldref(_class_index, name_and_type_index) =
-                            method.constant_pool.get(&cp_index).unwrap()
-                        {
-                            if let CpEntry::NameAndType(name_index, _) = method.constant_pool.get(name_and_type_index).unwrap() {
-                                let value = self.local_stack().pop()?;
-                                let mut objectref = self.local_stack().pop()?;
-                                if let Value::Ref(instance) = &mut *objectref.get() {
-                                    if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
-                                        object.data.insert(*name_index, value);
-                                    } else {
-                                        panic!("not an object, maybe array");
-                                    }
-                                } // else?
+                        let (class_index, field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
+                        let (field_name_index, _) = class.get_name_and_type(field_name_and_type_index).unwrap();
+                        let class_name_index = class.get_class_ref(class_index).unwrap();
+                        let class_name = class.get_utf8(class_name_index).unwrap();
+                        let field_name = class.get_utf8(field_name_index).unwrap();
+
+                        let value = self.local_stack().pop()?;
+                        let mut objectref = self.local_stack().pop()?;
+                        if let Value::Ref(instance) = &mut *objectref.get() {
+                            if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
+                                object.set(class_name, field_name, value);
                             }
                         }
                     }
@@ -348,7 +358,7 @@ impl Vm {
                             {
                                 println!("new {}", new_class);
                                 let class = self.get_class(new_class)?;
-                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(self.new_instance(class)))));
+                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Vm::new_instance(class)))));
                                 self.local_stack().push(Value::Ref(Arc::clone(&object)));
                                 self.heap.new_object(object);
                             }
@@ -522,6 +532,7 @@ fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Method
     }
     None
 }
+
 
 fn get_hum_args(signature: &str) -> usize {
     let mut num = 0;

@@ -4,27 +4,97 @@ use crate::heap::{Object, ObjectRef};
 use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::io::read_u16;
 
+// the class definition as read from the class file + derived values
 #[derive(Debug)]
-//TODO create factory function
 pub struct Class {
     pub minor_version: u16,
     pub major_version: u16,
     pub constant_pool: Rc<HashMap<u16, CpEntry>>,
     pub access_flags: u16,
-    pub this_class: u16,
-    pub super_class: u16,
-    pub interfaces: Vec<u16>,
-    pub fields: Vec<Field>,
+    pub name: String,
+    pub super_class_name: Option<String>,
+    pub super_class: Option<Rc<Class>>,
+    pub interface_indices: Vec<u16>,
+    pub interfaces: Vec<Class>,
+    pub fields: HashMap<String, Field>,
     pub methods: HashMap<String, Method>,
     pub attributes: HashMap<String, AttributeType>,
+    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
 }
 
 impl Class {
+    pub fn new(minor_version: u16,
+               major_version: u16,
+               constant_pool: Rc<HashMap<u16, CpEntry>>,
+               access_flags: u16,
+               this_class: u16,
+               super_class_index: u16,
+               interface_indices: Vec<u16>,
+               fields: HashMap<String, Field>,
+               methods: HashMap<String, Method>,
+               attributes: HashMap<String, AttributeType>) -> Self {
+        let name = Class::class_name(this_class, constant_pool.clone()).unwrap();
+        let super_class_name = Class::class_name(super_class_index, constant_pool.clone());
+
+        Self {
+            major_version,
+            minor_version,
+            constant_pool,
+            access_flags,
+            name,
+            super_class_name,
+            super_class: None, // has to be instantiated later, because it involves classloading. maybe not store it here
+            interface_indices,
+            interfaces: vec![], // same
+            fields,
+            methods,
+            attributes,
+            field_mapping: None,
+        }
+    }
+
+    pub(crate) fn n_fields(&self) -> usize {
+        self.field_mapping.as_ref().map_or(0, |m| m.len())
+    }
+
+    // Create a mapping per field(name) to an index in the storage vector that contains the instance data.
+    // When a field is stored, first the index will be looked up, using the qualified name (from the FieldRef)
+    // The qualified name is the combination of class name and field name.
+    // The class name is needed as part of the key to separate class from superclass fields
+    // (duplicates in the singular field name are allowed).
+    // This way `this.a` can be differentiated from `super.a`.
+    //
+    // this method looks up this and super classes and calls map_fields for each.
+    pub fn initialize(&mut self) {
+        let mut field_mapping = HashMap::new();
+        let mut field_map_index: usize = 0;
+
+        Class::map_fields(&mut field_mapping, self, &mut field_map_index);
+        let mut sooper = &self.super_class;
+        while let Some(super_class) = sooper {
+            Class::map_fields(&mut field_mapping, super_class, &mut field_map_index);
+            sooper = &super_class.super_class;
+        }
+        self.field_mapping = Some(field_mapping);
+    }
+
+    // part of the initialize procedure
+    fn map_fields(field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>, class: &Class, field_map_index: &mut usize) {
+        let mut this_fields = HashMap::new(); //fields in class are stored per class and every superclass.
+        for field in &class.fields {
+            this_fields.insert(field.0.to_owned(), (field.1.type_of().to_owned(), *field_map_index)); //name => (type,index)
+            *field_map_index += 1;
+        }
+        let this_name = class.name.to_owned();
+        field_mapping.insert(this_name, this_fields);
+    }
+
     pub fn get_version(&self) -> (u16, u16) {
         (self.major_version, self.minor_version)
     }
@@ -35,16 +105,58 @@ impl Class {
             .ok_or(anyhow!("Method {} not found", name))
     }
 
-    pub fn get_name(&self) -> &str {
-        if let CpEntry::ClassRef(name_index ) = self.constant_pool.get(&self.this_class).unwrap(){
-            if let CpEntry::Utf8(name) = self.constant_pool.get(name_index).unwrap(){
-                return name;
+    fn class_name(super_class_index: u16, constant_pool: Rc<HashMap<u16, CpEntry>>) -> Option<String> {
+        if super_class_index == 0 {
+            None
+        } else if let CpEntry::ClassRef(name_index) = constant_pool.get(&super_class_index).unwrap() {
+            if let CpEntry::Utf8(name) = constant_pool.get(name_index).unwrap() {
+                Some(name.to_owned())
+            } else {
+                None
             }
+        } else {
+            None
         }
-        panic!();
     }
+
+    // convienence methods for data from the constantpool
+
+    pub fn get_field_ref(&self, index: &u16) -> Option<(&u16, &u16)> {
+        if let CpEntry::Fieldref(class_index, name_and_type_index) = self.constant_pool.get(index).unwrap() {
+            Some((class_index, name_and_type_index))
+        } else {
+            None
+        }
+    }
+
+    pub fn get_class_ref(&self, index: &u16) -> Option<&u16> {
+        if let CpEntry::ClassRef(name_index) = self.constant_pool.get(index).unwrap() {
+            Some(name_index)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_utf8(&self, index: &u16) -> Option<&String> {
+        if let CpEntry::Utf8(utf8) = self.constant_pool.get(index).unwrap() {
+            Some(utf8)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_name_and_type(&self, index: &u16) -> Option<(&u16, &u16)> {
+        if let CpEntry::NameAndType(name_index, type_index) = self.constant_pool.get(index).unwrap(){
+            Some((name_index, type_index))
+        } else {
+            None
+        }
+    }
+
 }
+
 unsafe impl Send for Class {}
+
 unsafe impl Sync for Class {}
 
 pub struct Method {
@@ -101,6 +213,7 @@ pub struct Field {
     pub(crate) name_index: u16,
     descriptor_index: u16,
     attributes: HashMap<String, AttributeType>,
+    index: u16,
 }
 
 impl fmt::Debug for Field {
@@ -120,6 +233,7 @@ impl Field {
         name_index: u16,
         descriptor_index: u16,
         attributes: HashMap<String, AttributeType>,
+        field_index: u16,
     ) -> Self {
         Field {
             constant_pool,
@@ -127,18 +241,15 @@ impl Field {
             name_index,
             descriptor_index,
             attributes,
+            index: field_index,
         }
     }
 
-    pub fn name(&self) -> String {
-        let mut name = String::new();
-
-        name.push(' ');
-        if let CpEntry::Utf8(s) = &self.constant_pool.get(&self.name_index).unwrap() {
-            name.push_str(s);
+    pub fn name(&self) -> &String {
+        if let CpEntry::Utf8(utf8) = &self.constant_pool.get(&self.name_index).unwrap() {
+            return utf8;
         }
-
-        name
+        unreachable!()
     }
 
     pub fn type_of(&self) -> &String {
@@ -174,10 +285,11 @@ pub fn get_modifier(modifier: u16) -> String {
     output
 }
 
+//TODO implement more types
 #[derive(Debug)]
 pub enum AttributeType {
     ConstantValue(u16),
-    Code(MethodCode),
+    Code(Box<MethodCode>),
     StackMapTable,
     BootstrapMethods,
     NestHost,
@@ -256,8 +368,10 @@ impl MethodCode {
 
 #[derive(Debug)]
 pub enum Value {
-    Void, // variant returned for void methods
-    Null, // 'pointer' to nothing
+    Void,
+    // variant returned for void methods
+    Null,
+    // 'pointer' to nothing
     I32(i32),
     I64(i64),
     F32(f32),
@@ -268,4 +382,5 @@ pub enum Value {
 }
 
 unsafe impl Send for Value {}
+
 unsafe impl Sync for Value {}

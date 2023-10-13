@@ -4,6 +4,8 @@ use anyhow::Error;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+
+// The native classoader
 pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     let pos = &mut 0;
     check_magic(&bytecode, pos);
@@ -37,9 +39,10 @@ pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     }
 
     let fields_count = read_u16(&bytecode, pos);
-    let mut fields = vec![];
-    for _ in 0..fields_count {
-        fields.push(read_field(constant_pool.clone(), pos, &bytecode));
+    let mut fields = HashMap::new();
+    for i in 0..fields_count {
+        let field = read_field(constant_pool.clone(), pos, &bytecode, i);
+        fields.insert(field.name().to_owned(), field);
     }
 
     let methods_count = read_u16(&bytecode, pos);
@@ -56,11 +59,11 @@ pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
         if let Some(att) = some {
             attributes.insert(att.0, att.1);
         } else {
-            panic!(); // bug/not-implemented
+            panic!("attribute not found"); // bug/not-implemented
         }
     }
 
-    Ok(Class {
+    Ok(Class::new(
         minor_version,
         major_version,
         constant_pool,
@@ -71,7 +74,7 @@ pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
         fields,
         methods,
         attributes,
-    })
+    ))
 }
 
 fn check_magic(bytecode: &[u8], pos: &mut usize) {
@@ -83,6 +86,7 @@ fn check_magic(bytecode: &[u8], pos: &mut usize) {
 
 fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = read_u8(bytecode, index);
+    // println!("tag {}", tag);
     match tag {
         1 => {
             let len = read_u16(bytecode, index) as usize;
@@ -137,10 +141,21 @@ fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u
             let descriptor_index = read_u16(bytecode, index);
             CpEntry::NameAndType(name_index, descriptor_index)
         }
-        // 15 MethodHandle,
-        // 16 MethodType,
+        15 =>{
+            let reference_kind = read_u8(bytecode, index);
+            let reference_index = read_u16(bytecode, index);
+            CpEntry::MethodHandle(reference_kind, reference_index)
+        }
+        16 => {
+            let descriptor_index = read_u16(bytecode, index);
+            CpEntry::MethodType(descriptor_index)
+        }
         // 17 Dynamic,
-        // 18 InvokeDynamic,
+        18 => {
+            let bootstrap_method_attr_index = read_u16(bytecode, index);
+            let name_and_type_index = read_u16(bytecode, index);
+            CpEntry::InvokeDynamic(bootstrap_method_attr_index, name_and_type_index)
+        }
         // 19 Module,
         // 20 Package,
         _ => panic!("cp entry type not recognized"),
@@ -151,6 +166,7 @@ fn read_field(
     constant_pool: Rc<HashMap<u16, CpEntry>>,
     index: &mut usize,
     bytecode: &[u8],
+    field_index: u16,
 ) -> Field {
     let access_flags = read_u16(bytecode, index);
     let name_index = read_u16(bytecode, index);
@@ -170,6 +186,7 @@ fn read_field(
         name_index,
         descriptor_index,
         attributes,
+        field_index,
     )
 }
 
@@ -210,7 +227,7 @@ fn read_attribute(
     *index += attribute_length;
 
     if let CpEntry::Utf8(s) = &constant_pool.get(&attribute_name_index).unwrap() {
-        // println!("Att [{}]", s);
+        println!("Att [{}]", s);
         return match s.as_str() {
             "ConstantValue" => {
                 assert_eq!(info.len(), 2);
@@ -241,17 +258,22 @@ fn read_attribute(
                 }
                 Some((
                     "Code".into(),
-                    AttributeType::Code(MethodCode::new(
+                    AttributeType::Code(Box::new(MethodCode::new(
                         max_stack,
                         max_locals,
                         code,
                         exception_table,
                         code_attributes,
-                    )),
+                    ))),
                 ))
             }
             "SourceFile" => Some(("SourceFile".into(), AttributeType::SourceFile)),
             "LineNumberTable" => Some(("SourceFile".into(), AttributeType::LineNumberTable)),
+            "RuntimeVisibleAnnotations" => Some(("".into(), AttributeType::RuntimeInvisibleAnnotations)), //stub
+            "NestMembers" => Some(("".into(), AttributeType::NestMembers)),//stub
+            "BootstrapMethods" => Some(("".into(), AttributeType::BootstrapMethods)),//stub
+            "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),//stub
+            //TODO more actual attribute implementations
             _ => None,
         };
     }
@@ -271,4 +293,7 @@ pub enum CpEntry {
     MethodRef(u16, u16),
     InterfaceMethodref(u16, u16),
     NameAndType(u16, u16),
+    MethodHandle(u8, u16),
+    MethodType(u16),
+    InvokeDynamic(u16, u16),
 }

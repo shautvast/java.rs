@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0", features = ["default"] }
+once_cell = { version = "1.18.0", features = [] }
 zip = { version = "0.6", features = ["zstd"] }
