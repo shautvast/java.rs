@@ -100,11 +100,7 @@ impl Vm {
 
     pub fn new_instance(class: Rc<Class>) -> Object {
         let mut class = class;
-        // let mut outer = HashMap::new();
-        //TODO
-
         let mut instance = Object::new(class.clone());
-        instance.init_fields();
         instance
     }
 
@@ -317,24 +313,9 @@ impl Vm {
                             }
                         }
                     }
-                    INVOKEVIRTUAL => unsafe {
+                    INVOKEVIRTUAL | INVOKESPECIAL => unsafe {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
-                            let mut args = Vec::with_capacity(invocation.method.num_args);
-                            for _ in 0..invocation.method.num_args {
-                                args.insert(0, self.local_stack().pop()?);
-                            }
-                            args.insert(0, self.local_stack().pop()?);
-                            let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
-                            match *returnvalue.get() {
-                                Void => {}
-                                _ => { self.local_stack().push_arc(returnvalue.clone()); }
-                            }
-                        }
-                    }
-                    INVOKESPECIAL => unsafe {
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some(invocation) = get_signature_for_invoke(Rc::clone(&method.constant_pool), cp_index) {
+                        if let Some(invocation) = get_signature_for_invoke(&method.constant_pool, cp_index) {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, self.local_stack().pop()?);
@@ -348,22 +329,16 @@ impl Vm {
                         }
                     }
                     NEW => {
-                        let class_index = read_u16(&code.opcodes, pc);
-                        println!("cp_index {}", class_index);
-                        if let CpEntry::ClassRef(class_name_index) =
-                            method.constant_pool.get(&class_index).unwrap()
-                        {
-                            if let CpEntry::Utf8(new_class) =
-                                method.constant_pool.get(class_name_index).unwrap()
-                            {
-                                println!("new {}", new_class);
-                                let class = self.get_class(new_class)?;
-                                let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Vm::new_instance(class)))));
-                                self.local_stack().push(Value::Ref(Arc::clone(&object)));
-                                self.heap.new_object(object);
-                            }
-                        }
+                        let class_index = &read_u16(&code.opcodes, pc);
+                        let class_name_index = class.get_class_ref(class_index).unwrap();
+                        let class_name = class.get_utf8(class_name_index).unwrap();
+                        let class = self.get_class(class_name)?;
+
+                        let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Vm::new_instance(class)))));
+                        self.local_stack().push(Value::Ref(Arc::clone(&object)));
+                        self.heap.new_object(object);
                     }
+
                     //TODO implement all opcodes
                     _ => {
                         panic!("opcode not implemented {:?}", self.stack)
@@ -503,7 +478,7 @@ struct MethodSignature {
     num_args: usize,
 }
 
-fn get_signature_for_invoke(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
+fn get_signature_for_invoke(cp: &Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
     if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
             if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {

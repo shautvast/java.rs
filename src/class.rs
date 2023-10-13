@@ -1,16 +1,19 @@
-use std::cell::{RefCell, UnsafeCell};
-use crate::classloader::CpEntry;
-use crate::heap::{Object, ObjectRef};
-use anyhow::{anyhow, Error};
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use anyhow::{anyhow, Error};
+
+use crate::classloader::CpEntry;
+use crate::heap::ObjectRef;
 use crate::io::read_u16;
 
-// the class definition as read from the class file + derived values
+/// the class definition as read from the class file + derived values
+// TODO implement call to static initializers
+// TODO implement storage for static fields
 #[derive(Debug)]
 pub struct Class {
     pub minor_version: u16,
@@ -25,7 +28,7 @@ pub struct Class {
     pub fields: HashMap<String, Field>,
     pub methods: HashMap<String, Method>,
     pub attributes: HashMap<String, AttributeType>,
-    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
+    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index). See below
 }
 
 impl Class {

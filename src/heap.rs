@@ -12,7 +12,7 @@ pub struct Object {
     // locked: bool,
     // hashcode: i32,
     pub class: Rc<Class>,
-    pub data: Option<Vec<Arc<UnsafeCell<Value>>>>,
+    pub data: Vec<Arc<UnsafeCell<Value>>>,
 }//arrays
 
 // can contain object or array
@@ -37,14 +37,15 @@ unsafe impl Sync for Object {}
 // object, not array
 impl Object {
     pub fn new(class: Rc<Class>) -> Self {
-        Self { class, data: None }
+        let instance_data = Object::init_fields(&class);
+        Self { class, data:  instance_data}
     }
 
     // initializes all non-static fields to their default values
-    pub(crate) fn init_fields(&mut self) {
-        let mut field_data = Vec::with_capacity(self.class.n_fields());
+    pub(crate) fn init_fields(class: &Class) -> Vec<Arc<UnsafeCell<Value>>>{
+        let mut field_data = Vec::with_capacity(class.n_fields());
 
-        for (_, fields) in self.class.field_mapping.as_ref().unwrap() {
+        for (_, fields) in class.field_mapping.as_ref().unwrap() {
             for (_, (fieldtype, _)) in fields {
                 let value = match fieldtype.as_str() {
                     "Z" => Value::BOOL(false),
@@ -61,19 +62,17 @@ impl Object {
             }
         }
 
-        self.data = Some(field_data);
+        field_data
     }
 
     pub fn set(&mut self, class_name: &String, field_name: &String, value: Arc<UnsafeCell<Value>>) {
-        let p = self.class.field_mapping.as_ref().unwrap();
-        let p2 = p.get(class_name).unwrap();
-        let (_type, index) = p2.get(field_name).unwrap();
-        self.data.as_mut().unwrap()[*index] = value;
+        let (_type, index) = self.class.field_mapping.as_ref().unwrap().get(class_name).unwrap().get(field_name).unwrap();
+        self.data[*index] = value;
     }
 
     pub fn get(&mut self, class_name: &String, field_name: &String) -> &Arc<UnsafeCell<Value>> {
-        let (_type, index) = &self.class.field_mapping.as_ref().unwrap().get(class_name).unwrap().get(field_name).unwrap(); // (index, type)
-        &self.data.as_ref().unwrap()[*index]
+        let (_type, index) = &self.class.field_mapping.as_ref().unwrap().get(class_name).unwrap().get(field_name).unwrap();
+        &self.data[*index]
     }
 
     fn get_field_name(&self, cp_index: &u16) -> &str {
