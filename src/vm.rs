@@ -42,7 +42,7 @@ impl StackFrame {
 }
 
 //trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
-static mut CLASSDEFS: Lazy<HashMap<String, Rc<Class>>> = Lazy::new(|| HashMap::new()); //TODO add mutex...and Arc most likely
+static mut CLASSDEFS: Lazy<HashMap<String, Arc<Class>>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
 
 pub struct Vm {
     classpath: Vec<String>,
@@ -56,7 +56,9 @@ const PATH_SEPARATOR: char = ':';
 #[cfg(target_family = "windows")]
 const PATH_SEPARATOR: char = ';';
 
-// The singlethreaded VM (maybe a future Thread)
+/// The singlethreaded VM (maybe a future Thread)
+//TODO goto
+//TODO error handling
 impl Vm {
     fn local_stack(&mut self) -> &mut StackFrame {
         let i = self.stack.len() - 1;
@@ -71,10 +73,10 @@ impl Vm {
         }
     }
 
-    // parse the binary data into a Class struct
-    // gets the file from cache, or reads it from classpath
+    // gets the Class from cache, or reads it from classpath,
+    // then parses the binary data into a Class struct
     // Vm keeps ownership of the class and hands out Arc references to it
-    pub fn get_class(&self, class_name: &str) -> Result<Rc<Class>, Error> {
+    pub fn get_class(&self, class_name: &str) -> Result<Arc<Class>, Error> {
         println!("get_class {}", class_name);
         unsafe {
             let entry = CLASSDEFS.entry(class_name.into());
@@ -92,13 +94,13 @@ impl Vm {
                 }
                 class.initialize();
 
-                Rc::new(class)
+                Arc::new(class)
             });
             Ok(entry.clone())
         }
     }
 
-    pub fn new_instance(class: Rc<Class>) -> Object {
+    pub fn new_instance(class: Arc<Class>) -> Object {
         let mut class = class;
         let mut instance = Object::new(class.clone());
         instance
@@ -273,7 +275,7 @@ impl Vm {
                     }
                     GETSTATIC => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let (class_index, _field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
+                        let (class_index, _field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
                         let class_name_index = class.get_class_ref(class_index).unwrap();
                         let class_name = class.get_utf8(class_name_index).unwrap();
                         let class = self.get_class(class_name.as_str())?;

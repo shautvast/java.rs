@@ -22,13 +22,13 @@ pub struct Class {
     pub access_flags: u16,
     pub name: String,
     pub super_class_name: Option<String>,
-    pub super_class: Option<Rc<Class>>,
+    pub super_class: Option<Arc<Class>>,
     pub interface_indices: Vec<u16>,
     pub interfaces: Vec<Class>,
     pub fields: HashMap<String, Field>,
     pub methods: HashMap<String, Method>,
     pub attributes: HashMap<String, AttributeType>,
-    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index). See below
+    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
 }
 
 impl Class {

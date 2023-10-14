@@ -1,7 +1,5 @@
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::class::{Class, Value};
@@ -11,7 +9,7 @@ use crate::classloader::CpEntry;
 pub struct Object {
     // locked: bool,
     // hashcode: i32,
-    pub class: Rc<Class>,
+    pub class: Arc<Class>,
     pub data: Vec<Arc<UnsafeCell<Value>>>,
 }//arrays
 
@@ -36,7 +34,7 @@ unsafe impl Sync for Object {}
 
 // object, not array
 impl Object {
-    pub fn new(class: Rc<Class>) -> Self {
+    pub fn new(class: Arc<Class>) -> Self {
         let instance_data = Object::init_fields(&class);
         Self { class, data:  instance_data}
     }
