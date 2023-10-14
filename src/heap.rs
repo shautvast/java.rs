@@ -2,7 +2,7 @@ use std::cell::UnsafeCell;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::class::{Class, Value};
+use crate::class::{Class, UnsafeValue, Value};
 use crate::classloader::CpEntry;
 
 // trying to implement efficient object instance storage
@@ -10,8 +10,8 @@ pub struct Object {
     // locked: bool,
     // hashcode: i32,
     pub class: Arc<Class>,
-    pub data: Vec<Arc<UnsafeCell<Value>>>,
-}//arrays
+    pub data: Vec<UnsafeValue>,
+} //arrays
 
 // can contain object or array
 #[derive(Debug)]
@@ -36,11 +36,14 @@ unsafe impl Sync for Object {}
 impl Object {
     pub fn new(class: Arc<Class>) -> Self {
         let instance_data = Object::init_fields(&class);
-        Self { class, data:  instance_data}
+        Self {
+            class,
+            data: instance_data,
+        }
     }
 
     // initializes all non-static fields to their default values
-    pub(crate) fn init_fields(class: &Class) -> Vec<Arc<UnsafeCell<Value>>>{
+    pub(crate) fn init_fields(class: &Class) -> Vec<UnsafeValue> {
         let mut field_data = Vec::with_capacity(class.n_fields());
 
         for (_, fields) in class.field_mapping.as_ref().unwrap() {
@@ -56,20 +59,36 @@ impl Object {
                     "L" => Value::Null,
                     _ => Value::Void,
                 };
-                field_data.push(Arc::new(UnsafeCell::new(value)));
+                field_data.push(value.into());
             }
         }
 
         field_data
     }
 
-    pub fn set(&mut self, class_name: &String, field_name: &String, value: Arc<UnsafeCell<Value>>) {
-        let (_type, index) = self.class.field_mapping.as_ref().unwrap().get(class_name).unwrap().get(field_name).unwrap();
+    pub fn set(&mut self, class_name: &String, field_name: &String, value: UnsafeValue) {
+        let (_type, index) = self
+            .class
+            .field_mapping
+            .as_ref()
+            .unwrap()
+            .get(class_name)
+            .unwrap()
+            .get(field_name)
+            .unwrap();
         self.data[*index] = value;
     }
 
-    pub fn get(&mut self, class_name: &String, field_name: &String) -> &Arc<UnsafeCell<Value>> {
-        let (_type, index) = &self.class.field_mapping.as_ref().unwrap().get(class_name).unwrap().get(field_name).unwrap();
+    pub fn get(&mut self, class_name: &String, field_name: &String) -> &UnsafeValue {
+        let (_type, index) = &self
+            .class
+            .field_mapping
+            .as_ref()
+            .unwrap()
+            .get(class_name)
+            .unwrap()
+            .get(field_name)
+            .unwrap();
         &self.data[*index]
     }
 
@@ -90,11 +109,7 @@ impl fmt::Debug for Object {
         //     // r
         // }
         // ).collect();
-        write!(
-            f,
-            "{}",
-            self.class.name
-        )
+        write!(f, "{}", self.class.name)
     }
 }
 

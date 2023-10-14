@@ -53,7 +53,6 @@ pub fn read_bytecode(name: String) -> Result<Vec<u8>, Error> {
     Ok(buffer)
 }
 
-
 // methods to read values from big-endian binary data
 
 pub(crate) fn read_u8(data: &[u8], pos: &mut usize) -> u8 {
@@ -125,4 +124,3 @@ pub(crate) fn read_f64(data: &[u8], pos: &mut usize) -> f64 {
             .expect("slice with incorrect length"),
     )
 }
-

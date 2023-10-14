@@ -6,17 +6,18 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 use once_cell::unsync::Lazy;
 
-use crate::class::{AttributeType, Class, Value};
 use crate::class::Value::Void;
-use crate::classloader::{CpEntry, load_class};
+use crate::class::{AttributeType, Class, Modifier, UnsafeValue, Value};
+use crate::classloader::{load_class, CpEntry};
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
+use crate::native::invoke_native;
 use crate::opcodes::*;
 
 #[derive(Debug)]
 struct StackFrame {
     at: String,
-    data: Vec<Arc<UnsafeCell<Value>>>,
+    data: Vec<UnsafeValue>,
 }
 
 // maybe just call frame
@@ -32,11 +33,11 @@ impl StackFrame {
         self.data.push(Arc::new(UnsafeCell::new(val)));
     }
 
-    fn push_arc(&mut self, val: Arc<UnsafeCell<Value>>) {
+    fn push_arc(&mut self, val: UnsafeValue) {
         self.data.push(val);
     }
 
-    fn pop(&mut self) -> Result<Arc<UnsafeCell<Value>>, Error> {
+    fn pop(&mut self) -> Result<UnsafeValue, Error> {
         Ok(self.data.pop().unwrap())
     }
 }
@@ -67,7 +68,10 @@ impl Vm {
 
     pub fn new(classpath: &'static str) -> Self {
         Self {
-            classpath: classpath.split(PATH_SEPARATOR).map(|s| s.to_owned()).collect(),
+            classpath: classpath
+                .split(PATH_SEPARATOR)
+                .map(|s| s.to_owned())
+                .collect(),
             heap: Heap::new(),
             stack: vec![],
         }
@@ -81,7 +85,7 @@ impl Vm {
         unsafe {
             let entry = CLASSDEFS.entry(class_name.into());
             let entry = entry.or_insert_with(|| {
-                // print!("read class {} ", class_name);
+                println!("read class {} ", class_name);
                 let resolved_path = find_class(&self.classpath, class_name).unwrap();
                 // println!("full path {}", resolved_path);
                 let bytecode = read_bytecode(resolved_path).unwrap();
@@ -106,19 +110,31 @@ impl Vm {
         instance
     }
 
-
     /// execute the bytecode
     /// contains unsafe, as I think that mimics not-synchronized memory access in the original JVM
     pub fn execute(
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<Arc<UnsafeCell<Value>>>,
-    ) -> Result<Arc<UnsafeCell<Value>>, Error> {
-        let mut local_params: Vec<Option<Arc<UnsafeCell<Value>>>> = args.clone().iter().map(|e| Some(e.clone())).collect();
+        args: Vec<UnsafeValue>,
+    ) -> Result<UnsafeValue, Error> {
+        let mut local_params: Vec<Option<UnsafeValue>> =
+            args.clone().iter().map(|e| Some(e.clone())).collect();
         println!("execute {}.{}", class_name, method_name);
         let class = self.get_class(class_name)?;
         let method = class.get_method(method_name)?;
+        if method.is(Modifier::Native) {
+            let return_value = invoke_native(class.clone(), method);
+            unsafe {
+                match *return_value.get() {
+                    Void => {}
+                    _ => {
+                        self.local_stack().push_arc(return_value.clone());
+                    }
+                }
+            }
+        }
+
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
             let stackframe = StackFrame::new(class_name, method_name);
             self.stack.push(stackframe);
@@ -221,25 +237,31 @@ impl Vm {
                             }
                         }
                     }
-                    ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => { // omitting the type checks so far
+                    ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => {
+                        // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
-                        self.local_stack().push_arc(local_params[n].as_ref().unwrap().clone());
+                        self.local_stack()
+                            .push_arc(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
-                        self.local_stack().push_arc(local_params[0].as_ref().unwrap().clone());
+                        self.local_stack()
+                            .push_arc(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
-                        self.local_stack().push_arc(local_params[1].as_ref().unwrap().clone());
+                        self.local_stack()
+                            .push_arc(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
-                        self.local_stack().push_arc(local_params[2].as_ref().unwrap().clone());
+                        self.local_stack()
+                            .push_arc(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
-                        self.local_stack().push_arc(local_params[3].as_ref().unwrap().clone());
+                        self.local_stack()
+                            .push_arc(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
                         self.array_load()?;
-                    }
+                    },
                     ISTORE | LSTORE | FSTORE | DSTORE | ASTORE => {
                         let index = read_u8(&code.opcodes, pc) as usize;
                         self.store(&mut local_params, index)?;
@@ -256,7 +278,8 @@ impl Vm {
                     ISTORE_3 | LSTORE_3 | DSTORE_3 | ASTORE_3 | FSTORE_3 => {
                         self.store(&mut local_params, 3)?;
                     }
-                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => unsafe { self.array_store()? }
+                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
+                    | AASTORE => unsafe { self.array_store()? },
                     POP => {
                         self.local_stack().pop()?;
                     }
@@ -271,41 +294,44 @@ impl Vm {
                     }
                     RETURN_VOID => {
                         self.stack.pop(); // Void is also returned as a value
-                        return Ok(Arc::new(UnsafeCell::new(Void)));
+                        return Ok(Value::void());
                     }
                     GETSTATIC => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let (class_index, _field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
-                        let class_name_index = class.get_class_ref(class_index).unwrap();
-                        let class_name = class.get_utf8(class_name_index).unwrap();
+                        let (class_index, _field_name_and_type_index) =
+                            class.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
+                        let class_name_index = class.cp_class_ref(class_index).unwrap();
+                        let class_name = class.cp_utf8(class_name_index).unwrap();
                         let class = self.get_class(class_name.as_str())?;
-                        println!("{:?}", class); //TODO
+                        // println!("{:?}", class); //TODO
                     }
-                    GETFIELD => {
-                        unsafe {
-                            let cp_index = read_u16(&code.opcodes, pc);
-                            let (class_index, field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
-                            let (field_name_index, _) = class.get_name_and_type(field_name_and_type_index).unwrap();
-                            let class_name_index = class.get_class_ref(class_index).unwrap();
-                            let class_name = class.get_utf8(class_name_index).unwrap();
-                            let field_name = class.get_utf8(field_name_index).unwrap();
+                    GETFIELD => unsafe {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        let (class_index, field_name_and_type_index) =
+                            class.cp_field_ref(&cp_index).unwrap();
+                        let (field_name_index, _) =
+                            class.cp_name_and_type(field_name_and_type_index).unwrap();
+                        let class_name_index = class.cp_class_ref(class_index).unwrap();
+                        let class_name = class.cp_utf8(class_name_index).unwrap();
+                        let field_name = class.cp_utf8(field_name_index).unwrap();
 
-                            let mut objectref = self.local_stack().pop()?;
-                            if let Value::Ref(instance) = &mut *objectref.get() {
-                                if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
-                                    let value = object.get(class_name, field_name);
-                                    self.local_stack().push_arc(Arc::clone(value));
-                                }
+                        let mut objectref = self.local_stack().pop()?;
+                        if let Value::Ref(instance) = &mut *objectref.get() {
+                            if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
+                                let value = object.get(class_name, field_name);
+                                self.local_stack().push_arc(Arc::clone(value));
                             }
                         }
-                    }
+                    },
                     PUTFIELD => unsafe {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let (class_index, field_name_and_type_index) = class.get_field_ref(&cp_index).unwrap();
-                        let (field_name_index, _) = class.get_name_and_type(field_name_and_type_index).unwrap();
-                        let class_name_index = class.get_class_ref(class_index).unwrap();
-                        let class_name = class.get_utf8(class_name_index).unwrap();
-                        let field_name = class.get_utf8(field_name_index).unwrap();
+                        let (class_index, field_name_and_type_index) =
+                            class.cp_field_ref(&cp_index).unwrap();
+                        let (field_name_index, _) =
+                            class.cp_name_and_type(field_name_and_type_index).unwrap();
+                        let class_name_index = class.cp_class_ref(class_index).unwrap();
+                        let class_name = class.cp_utf8(class_name_index).unwrap();
+                        let field_name = class.cp_utf8(field_name_index).unwrap();
 
                         let value = self.local_stack().pop()?;
                         let mut objectref = self.local_stack().pop()?;
@@ -314,29 +340,61 @@ impl Vm {
                                 object.set(class_name, field_name, value);
                             }
                         }
-                    }
+                    },
                     INVOKEVIRTUAL | INVOKESPECIAL => unsafe {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some(invocation) = get_signature_for_invoke(&method.constant_pool, cp_index) {
+                        if let Some(invocation) =
+                            get_signature_for_invoke(&method.constant_pool, cp_index)
+                        {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, self.local_stack().pop()?);
                             }
                             args.insert(0, self.local_stack().pop()?);
-                            let mut returnvalue = self.execute(&invocation.class_name, &invocation.method.name, args)?;
-                            match *returnvalue.get() {
+                            let mut return_value = self.execute(
+                                &invocation.class_name,
+                                &invocation.method.name,
+                                args,
+                            )?;
+                            match *return_value.get() {
                                 Void => {}
-                                _ => { self.local_stack().push_arc(returnvalue.clone()); }
+                                _ => {
+                                    self.local_stack().push_arc(return_value.clone());
+                                }
                             }
                         }
-                    }
+                    },
+                    INVOKESTATIC => unsafe {
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let Some(invocation) =
+                            get_signature_for_invoke(&method.constant_pool, cp_index)
+                        {
+                            let mut args = Vec::with_capacity(invocation.method.num_args);
+                            for _ in 0..invocation.method.num_args {
+                                args.insert(0, self.local_stack().pop()?);
+                            }
+                            let mut returnvalue = self.execute(
+                                &invocation.class_name,
+                                &invocation.method.name,
+                                args,
+                            )?;
+                            match *returnvalue.get() {
+                                Void => {}
+                                _ => {
+                                    self.local_stack().push_arc(returnvalue.clone());
+                                }
+                            }
+                        }
+                    },
                     NEW => {
                         let class_index = &read_u16(&code.opcodes, pc);
-                        let class_name_index = class.get_class_ref(class_index).unwrap();
-                        let class_name = class.get_utf8(class_name_index).unwrap();
+                        let class_name_index = class.cp_class_ref(class_index).unwrap();
+                        let class_name = class.cp_utf8(class_name_index).unwrap();
                         let class = self.get_class(class_name)?;
 
-                        let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Vm::new_instance(class)))));
+                        let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
+                            Vm::new_instance(class),
+                        ))));
                         self.local_stack().push(Value::Ref(Arc::clone(&object)));
                         self.heap.new_object(object);
                     }
@@ -386,7 +444,8 @@ impl Vm {
                         self.local_stack().push(Value::F64(array[index]));
                     }
                     ObjectRef::ObjectArray(ref array) => {
-                        self.local_stack().push(Value::Ref(array.get(index).unwrap().clone()));
+                        self.local_stack()
+                            .push(Value::Ref(array.get(index).unwrap().clone()));
                     }
                     ObjectRef::Object(_) => {} //throw error?
                 }
@@ -408,12 +467,14 @@ impl Vm {
             if let Value::Ref(ref mut objectref) = arrayref {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() { // is i32 correct?
+                        if let Value::I32(value) = *value.get() {
+                            // is i32 correct?
                             array[*index as usize] = value as i8;
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() { // is i32 correct?
+                        if let Value::I32(value) = *value.get() {
+                            // is i32 correct?
                             array[*index as usize] = value as i16;
                         }
                     }
@@ -452,14 +513,18 @@ impl Vm {
                             array[*index as usize] = value.clone();
                         }
                     }
-                    ObjectRef::Object(_) => {}//throw error?
+                    ObjectRef::Object(_) => {} //throw error?
                 }
             }
         }
         Ok(())
     }
 
-    fn store(&mut self, local_params: &mut Vec<Option<Arc<UnsafeCell<Value>>>>, index: usize) -> Result<(), Error> {
+    fn store(
+        &mut self,
+        local_params: &mut Vec<Option<UnsafeValue>>,
+        index: usize,
+    ) -> Result<(), Error> {
         let value = self.local_stack().pop()?;
         while local_params.len() < index + 1 {
             local_params.push(None);
@@ -468,7 +533,6 @@ impl Vm {
         Ok(())
     }
 }
-
 
 struct Invocation {
     class_name: String,
@@ -480,8 +544,11 @@ struct MethodSignature {
     num_args: usize,
 }
 
+// TODO can be simplified now, using cp_ methods in Class
 fn get_signature_for_invoke(cp: &Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
-    if let CpEntry::MethodRef(class_index, name_and_type_index) = cp.get(&index).unwrap() {
+    if let CpEntry::MethodRef(class_index, name_and_type_index)
+    | CpEntry::InterfaceMethodref(class_index, name_and_type_index) = cp.get(&index).unwrap()
+    {
         if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
             if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
                 if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
@@ -503,13 +570,15 @@ fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Method
                 let mut method_signature: String = method_name.into();
                 let num_args = get_hum_args(signature);
                 method_signature.push_str(signature);
-                return Some(MethodSignature { name: method_signature, num_args });
+                return Some(MethodSignature {
+                    name: method_signature,
+                    num_args,
+                });
             }
         }
     }
     None
 }
-
 
 fn get_hum_args(signature: &str) -> usize {
     let mut num = 0;

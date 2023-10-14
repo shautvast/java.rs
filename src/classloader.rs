@@ -4,7 +4,6 @@ use anyhow::Error;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-
 // The native classoader
 pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     let pos = &mut 0;
@@ -141,7 +140,7 @@ fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u
             let descriptor_index = read_u16(bytecode, index);
             CpEntry::NameAndType(name_index, descriptor_index)
         }
-        15 =>{
+        15 => {
             let reference_kind = read_u8(bytecode, index);
             let reference_index = read_u16(bytecode, index);
             CpEntry::MethodHandle(reference_kind, reference_index)
@@ -227,7 +226,7 @@ fn read_attribute(
     *index += attribute_length;
 
     if let CpEntry::Utf8(s) = &constant_pool.get(&attribute_name_index).unwrap() {
-        println!("Att [{}]", s);
+        // println!("Att [{}]", s);
         return match s.as_str() {
             "ConstantValue" => {
                 assert_eq!(info.len(), 2);
@@ -251,8 +250,7 @@ fn read_attribute(
                 let attribute_count = read_u16(&info, ci);
                 let mut code_attributes = HashMap::new();
                 for _ in 0..attribute_count {
-                    if let Some(att) = read_attribute(constant_pool.clone(), &info, ci)
-                    {
+                    if let Some(att) = read_attribute(constant_pool.clone(), &info, ci) {
                         code_attributes.insert(att.0, att.1);
                     }
                 }
@@ -267,12 +265,14 @@ fn read_attribute(
                     ))),
                 ))
             }
-            "SourceFile" => Some(("SourceFile".into(), AttributeType::SourceFile)),
-            "LineNumberTable" => Some(("SourceFile".into(), AttributeType::LineNumberTable)),
-            "RuntimeVisibleAnnotations" => Some(("".into(), AttributeType::RuntimeInvisibleAnnotations)), //stub
-            "NestMembers" => Some(("".into(), AttributeType::NestMembers)),//stub
-            "BootstrapMethods" => Some(("".into(), AttributeType::BootstrapMethods)),//stub
-            "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),//stub
+            "SourceFile" => Some(("SourceFile".into(), AttributeType::SourceFile)), //stub
+            "LineNumberTable" => Some(("SourceFile".into(), AttributeType::LineNumberTable)), //stub
+            "RuntimeVisibleAnnotations" => {
+                Some(("".into(), AttributeType::RuntimeInvisibleAnnotations))
+            } //stub
+            "NestMembers" => Some(("".into(), AttributeType::NestMembers)),         //stub
+            "BootstrapMethods" => Some(("".into(), AttributeType::BootstrapMethods)), //stub
+            "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),       //stub
             //TODO more actual attribute implementations
             _ => None,
         };
@@ -287,12 +287,12 @@ pub enum CpEntry {
     Float(f32),
     Long(i64),
     Double(f64),
-    ClassRef(u16),
-    StringRef(u16),
-    Fieldref(u16, u16),
-    MethodRef(u16, u16),
-    InterfaceMethodref(u16, u16),
-    NameAndType(u16, u16),
+    ClassRef(u16),                // (utf8)
+    StringRef(u16),               // (utf8)
+    Fieldref(u16, u16),           // (class, name_and_type)
+    MethodRef(u16, u16),          // (class, name_and_type)
+    InterfaceMethodref(u16, u16), // (class, name_and_type)
+    NameAndType(u16, u16),        // (name, descriptor)
     MethodHandle(u8, u16),
     MethodType(u16),
     InvokeDynamic(u16, u16),

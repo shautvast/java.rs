@@ -1,8 +1,6 @@
 mod test {
-    use classfile_reader::class::Value;
-    use classfile_reader::vm::Vm;
-    use classfile_reader::{classloader::load_class, io};
-    use std::rc::Rc;
+    use java_rs::class::Value;
+    use java_rs::vm::Vm;
     use std::sync::Arc;
 
     #[test]

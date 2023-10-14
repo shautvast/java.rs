@@ -6,7 +6,7 @@ fn main() -> Result<(), Error> {
     // TODO build index for package -> jarfile?
 
     let mut vm = Vm::new("tests");
-    let main_class = "Main";
+    let main_class = "Inheritance";
 
     vm.execute(main_class, "main([Ljava/lang/String;)V", vec![])
         .unwrap();

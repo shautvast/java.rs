@@ -32,16 +32,18 @@ pub struct Class {
 }
 
 impl Class {
-    pub fn new(minor_version: u16,
-               major_version: u16,
-               constant_pool: Rc<HashMap<u16, CpEntry>>,
-               access_flags: u16,
-               this_class: u16,
-               super_class_index: u16,
-               interface_indices: Vec<u16>,
-               fields: HashMap<String, Field>,
-               methods: HashMap<String, Method>,
-               attributes: HashMap<String, AttributeType>) -> Self {
+    pub fn new(
+        minor_version: u16,
+        major_version: u16,
+        constant_pool: Rc<HashMap<u16, CpEntry>>,
+        access_flags: u16,
+        this_class: u16,
+        super_class_index: u16,
+        interface_indices: Vec<u16>,
+        fields: HashMap<String, Field>,
+        methods: HashMap<String, Method>,
+        attributes: HashMap<String, AttributeType>,
+    ) -> Self {
         let name = Class::class_name(this_class, constant_pool.clone()).unwrap();
         let super_class_name = Class::class_name(super_class_index, constant_pool.clone());
 
@@ -88,10 +90,17 @@ impl Class {
     }
 
     // part of the initialize procedure
-    fn map_fields(field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>, class: &Class, field_map_index: &mut usize) {
+    fn map_fields(
+        field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
+        class: &Class,
+        field_map_index: &mut usize,
+    ) {
         let mut this_fields = HashMap::new(); //fields in class are stored per class and every superclass.
         for field in &class.fields {
-            this_fields.insert(field.0.to_owned(), (field.1.type_of().to_owned(), *field_map_index)); //name => (type,index)
+            this_fields.insert(
+                field.0.to_owned(),
+                (field.1.type_of().to_owned(), *field_map_index),
+            ); //name => (type,index)
             *field_map_index += 1;
         }
         let this_name = class.name.to_owned();
@@ -108,10 +117,14 @@ impl Class {
             .ok_or(anyhow!("Method {} not found", name))
     }
 
-    fn class_name(super_class_index: u16, constant_pool: Rc<HashMap<u16, CpEntry>>) -> Option<String> {
+    fn class_name(
+        super_class_index: u16,
+        constant_pool: Rc<HashMap<u16, CpEntry>>,
+    ) -> Option<String> {
         if super_class_index == 0 {
             None
-        } else if let CpEntry::ClassRef(name_index) = constant_pool.get(&super_class_index).unwrap() {
+        } else if let CpEntry::ClassRef(name_index) = constant_pool.get(&super_class_index).unwrap()
+        {
             if let CpEntry::Utf8(name) = constant_pool.get(name_index).unwrap() {
                 Some(name.to_owned())
             } else {
@@ -124,15 +137,30 @@ impl Class {
 
     // convienence methods for data from the constantpool
 
-    pub fn get_field_ref(&self, index: &u16) -> Option<(&u16, &u16)> {
-        if let CpEntry::Fieldref(class_index, name_and_type_index) = self.constant_pool.get(index).unwrap() {
+    pub fn cp_field_ref(&self, index: &u16) -> Option<(&u16, &u16)> {
+        if let CpEntry::Fieldref(class_index, name_and_type_index) =
+            self.constant_pool.get(index).unwrap()
+        {
             Some((class_index, name_and_type_index))
         } else {
             None
         }
     }
 
-    pub fn get_class_ref(&self, index: &u16) -> Option<&u16> {
+    /// both methodRef and InterfaceMethodRef
+    /// returns (class_index, name_and_type_index)
+    pub fn cp_method_ref(&self, index: &u16) -> Option<(&u16, &u16)> {
+        if let CpEntry::MethodRef(class_index, name_and_type_index)
+        | CpEntry::InterfaceMethodref(class_index, name_and_type_index) =
+            self.constant_pool.get(index).unwrap()
+        {
+            Some((class_index, name_and_type_index))
+        } else {
+            None
+        }
+    }
+
+    pub fn cp_class_ref(&self, index: &u16) -> Option<&u16> {
         if let CpEntry::ClassRef(name_index) = self.constant_pool.get(index).unwrap() {
             Some(name_index)
         } else {
@@ -140,7 +168,7 @@ impl Class {
         }
     }
 
-    pub fn get_utf8(&self, index: &u16) -> Option<&String> {
+    pub fn cp_utf8(&self, index: &u16) -> Option<&String> {
         if let CpEntry::Utf8(utf8) = self.constant_pool.get(index).unwrap() {
             Some(utf8)
         } else {
@@ -148,14 +176,14 @@ impl Class {
         }
     }
 
-    pub fn get_name_and_type(&self, index: &u16) -> Option<(&u16, &u16)> {
-        if let CpEntry::NameAndType(name_index, type_index) = self.constant_pool.get(index).unwrap(){
+    pub fn cp_name_and_type(&self, index: &u16) -> Option<(&u16, &u16)> {
+        if let CpEntry::NameAndType(name_index, type_index) = self.constant_pool.get(index).unwrap()
+        {
             Some((name_index, type_index))
         } else {
             None
         }
     }
-
 }
 
 unsafe impl Send for Class {}
@@ -207,6 +235,11 @@ impl Method {
         }
 
         full_name
+    }
+
+    pub fn is(&self, modifier: Modifier) -> bool {
+        let m = modifier as u16;
+        (self.access_flags & m) == m
     }
 }
 
@@ -263,29 +296,34 @@ impl Field {
     }
 }
 
-const MODIFIERS: [(u16, &str); 12] = [
-    (0x0001, "public "),
-    (0x0002, "private "),
-    (0x0004, "protected "),
-    (0x0008, "static "),
-    (0x0010, "final "),
-    (0x0020, "synchronized "),
-    (0x0040, "volatile "),
-    (0x0080, "transient "),
-    (0x0100, "native "),
-    (0x0200, "interface "),
-    (0x0400, "interface "),
-    (0x0800, "strict "),
+const MODIFIERS: [(Modifier, &str); 12] = [
+    (Modifier::Public, "public "),
+    (Modifier::Private, "private "),
+    (Modifier::Protected, "protected "),
+    (Modifier::Static, "static "),
+    (Modifier::Final, "final "),
+    (Modifier::Synchronized, "synchronized "),
+    (Modifier::Volatile, "volatile "),
+    (Modifier::Transient, "transient "),
+    (Modifier::Native, "native "),
+    (Modifier::Abstract, "abstract"),
+    (Modifier::Strict, "strict"),
+    (Modifier::Synthetic, "synthetic"),
 ];
 
-pub fn get_modifier(modifier: u16) -> String {
-    let mut output = String::new();
-    for m in MODIFIERS {
-        if modifier & m.0 == m.0 {
-            output.push_str(m.1)
-        }
-    }
-    output
+pub enum Modifier {
+    Public = 0x0001,
+    Private = 0x0002,
+    Protected = 0x0004,
+    Static = 0x0008,
+    Final = 0x0010,
+    Synchronized = 0x0020,
+    Volatile = 0x0040,
+    Transient = 0x0080,
+    Native = 0x0100,
+    Abstract = 0x0400,
+    Strict = 0x0800,
+    Synthetic = 0x1000,
 }
 
 //TODO implement more types
@@ -383,6 +421,20 @@ pub enum Value {
     CHAR(char),
     Ref(Arc<UnsafeCell<ObjectRef>>),
 }
+
+impl Value {
+    pub fn void() -> UnsafeValue {
+        Arc::new(UnsafeCell::new(Value::Void))
+    }
+}
+
+impl Into<UnsafeValue> for Value {
+    fn into(self) -> UnsafeValue {
+        Arc::new(UnsafeCell::new(self))
+    }
+}
+
+pub type UnsafeValue = Arc<UnsafeCell<Value>>;
 
 unsafe impl Send for Value {}
 
