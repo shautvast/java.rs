@@ -125,6 +125,7 @@ pub const DRETURN: u8 = 175; // (0xaf) Return double from method
 pub const areturn: u8 = 176; //(0xb0) return reference
 pub const RETURN_VOID: u8 = 177; // (0xb1) Return void from method (actually 'return' but that's a keyword)
 pub const GETSTATIC: u8 = 178; // (0xb2) Get static field from class
+pub const PUTSTATIC: u8 = 179; // (0xb3) Set static field in class
 pub const GETFIELD: u8 = 180; // (0xb4) Fetch field from object3
 pub const PUTFIELD: u8 = 181; // (0xb5) Set field in object
 pub const INVOKEVIRTUAL: u8 = 182; // (0xb6) Invoke instance method; dispatch based on class

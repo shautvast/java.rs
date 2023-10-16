@@ -1,17 +1,9 @@
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::class::{Class, UnsafeValue, Value};
-use crate::classloader::CpEntry;
-
-// trying to implement efficient object instance storage
-pub struct Object {
-    // locked: bool,
-    // hashcode: i32,
-    pub class: Arc<Class>,
-    pub data: Vec<UnsafeValue>,
-} //arrays
 
 // can contain object or array
 #[derive(Debug)]
@@ -28,14 +20,22 @@ pub enum ObjectRef {
     Object(Box<Object>),
 }
 
+// trying to implement efficient object instance storage
+pub struct Object {
+    // locked: bool,
+    // hashcode: i32,
+    pub class: Arc<RefCell<Class>>,
+    pub data: Vec<UnsafeValue>,
+} //arrays
+
 unsafe impl Send for Object {}
 
 unsafe impl Sync for Object {}
 
 // object, not array
 impl Object {
-    pub fn new(class: Arc<Class>) -> Self {
-        let instance_data = Object::init_fields(&class);
+    pub fn new(class: Arc<RefCell<Class>>) -> Self {
+        let instance_data = Object::init_fields(class.clone());
         Self {
             class,
             data: instance_data,
@@ -43,10 +43,10 @@ impl Object {
     }
 
     // initializes all non-static fields to their default values
-    pub(crate) fn init_fields(class: &Class) -> Vec<UnsafeValue> {
-        let mut field_data = Vec::with_capacity(class.n_fields());
+    pub(crate) fn init_fields(class: Arc<RefCell<Class>>) -> Vec<UnsafeValue> {
+        let mut field_data = Vec::with_capacity(class.borrow().n_object_fields());
 
-        for (_, fields) in class.field_mapping.as_ref().unwrap() {
+        for (_, fields) in &class.borrow().object_field_mapping {
             for (_, (fieldtype, _)) in fields {
                 let value = match fieldtype.as_str() {
                     "Z" => Value::BOOL(false),
@@ -67,11 +67,9 @@ impl Object {
     }
 
     pub fn set(&mut self, class_name: &String, field_name: &String, value: UnsafeValue) {
-        let (_type, index) = self
-            .class
-            .field_mapping
-            .as_ref()
-            .unwrap()
+        let borrow =  self.class.borrow();
+        let (_type, index) =borrow
+            .object_field_mapping
             .get(class_name)
             .unwrap()
             .get(field_name)
@@ -80,11 +78,9 @@ impl Object {
     }
 
     pub fn get(&mut self, class_name: &String, field_name: &String) -> &UnsafeValue {
-        let (_type, index) = &self
-            .class
-            .field_mapping
-            .as_ref()
-            .unwrap()
+        let borrow =  self.class.borrow();
+        let (_type, index) =borrow
+            .object_field_mapping
             .get(class_name)
             .unwrap()
             .get(field_name)
@@ -92,12 +88,12 @@ impl Object {
         &self.data[*index]
     }
 
-    fn get_field_name(&self, cp_index: &u16) -> &str {
-        if let CpEntry::Utf8(name) = self.class.constant_pool.get(cp_index).unwrap() {
-            return name;
-        }
-        panic!()
-    }
+    // fn get_field_name(&self, cp_index: &u16) -> &str {
+    //     if let CpEntry::Utf8(name) = self.class.constant_pool.get(cp_index).unwrap() {
+    //         return name;
+    //     }
+    //     panic!()
+    // }
 }
 
 impl fmt::Debug for Object {
@@ -109,7 +105,7 @@ impl fmt::Debug for Object {
         //     // r
         // }
         // ).collect();
-        write!(f, "{}", self.class.name)
+        write!(f, "{}", self.class.borrow().name)
     }
 }
 

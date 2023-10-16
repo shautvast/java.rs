@@ -1,4 +1,4 @@
-use std::cell::UnsafeCell;
+use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
@@ -6,14 +6,52 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
+use once_cell::sync::Lazy;
 
-use crate::classloader::CpEntry;
+use crate::classloader::{CpEntry, load_class};
 use crate::heap::ObjectRef;
-use crate::io::read_u16;
+use crate::io::{find_class, read_bytecode, read_u16};
+use crate::vm::Vm;
+
+//trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
+static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
+
+
+// gets the Class from cache, or reads it from classpath,
+// then parses the binary data into a Class struct
+// Vm keeps ownership of the class and hands out Arc references to it
+pub fn get_class(vm: &mut Vm, class_name: &str) -> Result<Arc<RefCell<Class>>, Error> {
+    println!("get_class {}", class_name);
+    unsafe {
+        let new_class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
+            println!("read class {} ", class_name);
+            let resolved_path = find_class(&vm.classpath, class_name).unwrap();
+            // println!("full path {}", resolved_path);
+            let bytecode = read_bytecode(resolved_path).unwrap();
+            let mut class = load_class(bytecode).unwrap();
+            let super_class_name = class.super_class_name.as_ref();
+            if let Some(super_class_name) = super_class_name {
+                if let Ok(super_class) = get_class(vm, &super_class_name) {
+                    class.super_class = Some(super_class);
+                }
+            }
+            Arc::new(RefCell::new(class))
+        });
+
+        Class::initialize_fields(new_class.clone());
+
+        let exec = new_class.borrow().methods.contains_key("<clinit>()V");
+        if exec {
+            vm.execute_class(new_class.clone(), "<clinit>()V", vec![]).unwrap();
+        }
+
+        Ok(new_class.clone())
+    }
+}
+
 
 /// the class definition as read from the class file + derived values
 // TODO implement call to static initializers
-// TODO implement storage for static fields
 #[derive(Debug)]
 pub struct Class {
     pub minor_version: u16,
@@ -22,13 +60,17 @@ pub struct Class {
     pub access_flags: u16,
     pub name: String,
     pub super_class_name: Option<String>,
-    pub super_class: Option<Arc<Class>>,
+    pub super_class: Option<Arc<RefCell<Class>>>,
     pub interface_indices: Vec<u16>,
     pub interfaces: Vec<Class>,
     pub fields: HashMap<String, Field>,
-    pub methods: HashMap<String, Method>,
+    pub methods: HashMap<String, Rc<Method>>,
     pub attributes: HashMap<String, AttributeType>,
-    pub(crate) field_mapping: Option<HashMap<String, HashMap<String, (String, usize)>>>, // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
+    pub(crate) object_field_mapping: HashMap<String, HashMap<String, (String, usize)>>,
+    // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
+    pub(crate) static_field_mapping: HashMap<String, HashMap<String, (String, usize)>>,
+    // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
+    pub(crate) static_data: Vec<UnsafeValue>,
 }
 
 impl Class {
@@ -41,7 +83,7 @@ impl Class {
         super_class_index: u16,
         interface_indices: Vec<u16>,
         fields: HashMap<String, Field>,
-        methods: HashMap<String, Method>,
+        methods: HashMap<String, Rc<Method>>,
         attributes: HashMap<String, AttributeType>,
     ) -> Self {
         let name = Class::class_name(this_class, constant_pool.clone()).unwrap();
@@ -60,12 +102,18 @@ impl Class {
             fields,
             methods,
             attributes,
-            field_mapping: None,
+            object_field_mapping: HashMap::new(),
+            static_field_mapping: HashMap::new(),
+            static_data: vec![],
         }
     }
 
-    pub(crate) fn n_fields(&self) -> usize {
-        self.field_mapping.as_ref().map_or(0, |m| m.len())
+    pub(crate) fn n_object_fields(&self) -> usize {
+        self.object_field_mapping.len()
+    }
+
+    pub(crate) fn n_static_fields(&self) -> usize {
+        self.object_field_mapping.len()
     }
 
     // Create a mapping per field(name) to an index in the storage vector that contains the instance data.
@@ -76,42 +124,64 @@ impl Class {
     // This way `this.a` can be differentiated from `super.a`.
     //
     // this method looks up this and super classes and calls map_fields for each.
-    pub fn initialize(&mut self) {
-        let mut field_mapping = HashMap::new();
+    pub fn initialize_fields(class: Arc<RefCell<Class>>) {
+        let mut this_field_mapping = HashMap::new();
+        let mut static_field_mapping = HashMap::new();
         let mut field_map_index: usize = 0;
 
-        Class::map_fields(&mut field_mapping, self, &mut field_map_index);
-        let mut sooper = &self.super_class;
-        while let Some(super_class) = sooper {
-            Class::map_fields(&mut field_mapping, super_class, &mut field_map_index);
-            sooper = &super_class.super_class;
+        Class::add_field_mappings(&mut this_field_mapping, &mut static_field_mapping, class.clone(), &mut field_map_index);
+
+        class.borrow_mut().object_field_mapping = this_field_mapping;
+        class.borrow_mut().static_field_mapping = static_field_mapping;
+
+        let static_data = Class::set_field_data(class.clone());
+        class.borrow_mut().static_data = static_data;
+    }
+
+    fn add_field_mappings(this_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
+                          static_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
+                          class: Arc<RefCell<Class>>, field_map_index: &mut usize) {
+        let (o, s) = Class::map_fields(class.clone(), field_map_index);
+        let borrow = class.borrow();
+        let name = &borrow.name;
+        this_field_mapping.insert(name.to_owned(), o);
+        static_field_mapping.insert(name.to_owned(), s);
+
+        if let Some(super_class) = class.borrow().super_class.as_ref() {
+            Class::add_field_mappings(this_field_mapping, static_field_mapping, super_class.clone(), field_map_index);
         }
-        self.field_mapping = Some(field_mapping);
     }
 
     // part of the initialize procedure
     fn map_fields(
-        field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
-        class: &Class,
+        class: Arc<RefCell<Class>>,
         field_map_index: &mut usize,
-    ) {
+    ) -> (HashMap<String, (String, usize)>, HashMap<String, (String, usize)>) {
         let mut this_fields = HashMap::new(); //fields in class are stored per class and every superclass.
-        for field in &class.fields {
-            this_fields.insert(
-                field.0.to_owned(),
-                (field.1.type_of().to_owned(), *field_map_index),
-            ); //name => (type,index)
+        let mut static_fields = HashMap::new(); //fields in class are stored per class and every superclass.
+
+        for (name, field) in &class.borrow().fields {
+            if field.is(Modifier::Static) {
+                static_fields.insert(
+                    name.to_owned(),
+                    (field.type_of().to_owned(), *field_map_index),
+                );
+            } else {
+                this_fields.insert(
+                    name.to_owned(),
+                    (field.type_of().to_owned(), *field_map_index),
+                ); //name => (type,index)
+            }
             *field_map_index += 1;
         }
-        let this_name = class.name.to_owned();
-        field_mapping.insert(this_name, this_fields);
+        (this_fields, static_fields)
     }
 
     pub fn get_version(&self) -> (u16, u16) {
         (self.major_version, self.minor_version)
     }
 
-    pub fn get_method(&self, name: &str) -> Result<&Method, Error> {
+    pub fn get_method(&self, name: &str) -> Result<&Rc<Method>, Error> {
         self.methods
             .get(name)
             .ok_or(anyhow!("Method {} not found", name))
@@ -133,6 +203,29 @@ impl Class {
         } else {
             None
         }
+    }
+
+    pub(crate) fn set_field_data(class: Arc<RefCell<Class>>) -> Vec<UnsafeValue> {
+        let mut field_data = Vec::with_capacity(class.borrow().n_object_fields());
+
+        for (_, fields) in &class.borrow().static_field_mapping {
+            for (_, (fieldtype, _)) in fields {
+                let value = match fieldtype.as_str() {
+                    "Z" => Value::BOOL(false),
+                    "B" => Value::I32(0),
+                    "S" => Value::I32(0),
+                    "I" => Value::I32(0),
+                    "J" => Value::I64(0),
+                    "F" => Value::F32(0.0),
+                    "D" => Value::F64(0.0),
+                    "L" => Value::Null,
+                    _ => Value::Void,
+                };
+                field_data.push(value.into());
+            }
+        }
+
+        field_data
     }
 
     // convienence methods for data from the constantpool
@@ -279,6 +372,11 @@ impl Field {
             attributes,
             index: field_index,
         }
+    }
+
+    pub fn is(&self, modifier: Modifier) -> bool {
+        let modifier = modifier as u16;
+        self.access_flags & modifier == modifier
     }
 
     pub fn name(&self) -> &String {

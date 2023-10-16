@@ -48,7 +48,7 @@ pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     let mut methods = HashMap::new();
     for _ in 0..methods_count {
         let m = read_method(constant_pool.clone(), pos, &bytecode);
-        methods.insert(m.name(), m);
+        methods.insert(m.name(), Rc::new(m));
     }
 
     let attributes_count = read_u16(&bytecode, pos);
