@@ -9,7 +9,7 @@ fn main() -> Result<(), Error> {
     // let main_class = "Inheritance";
     let main_class = "Main";
 
-    vm.execute(main_class, "main([Ljava/lang/String;)V", vec![])
+    vm.execute(None,main_class, "main([Ljava/lang/String;)V", vec![])
         .unwrap();
     Ok(())
 }

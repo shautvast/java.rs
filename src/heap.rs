@@ -56,8 +56,7 @@ impl Object {
                     "J" => Value::I64(0),
                     "F" => Value::F32(0.0),
                     "D" => Value::F64(0.0),
-                    "L" => Value::Null,
-                    _ => Value::Void,
+                    _ => Value::Null,
                 };
                 field_data.push(value.into());
             }

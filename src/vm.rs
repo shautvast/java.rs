@@ -1,5 +1,6 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -38,6 +39,10 @@ impl StackFrame {
 
     fn pop(&mut self) -> Result<UnsafeValue, Error> {
         Ok(self.data.pop().unwrap())
+    }
+
+    fn len(&self) -> usize {
+        self.data.len()
     }
 }
 
@@ -84,11 +89,12 @@ impl Vm {
     /// contains unsafe, as I think that mimics not-synchronized memory access in the original JVM
     pub fn execute(
         &mut self,
+        calling_class_name: Option<&str>,
         class_name: &str,
         method_name: &str,
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
-        let class = get_class(self, class_name)?;
+        let class = get_class(self, calling_class_name, class_name)?;
         self.execute_class(class, method_name, args)
     }
 
@@ -114,7 +120,7 @@ impl Vm {
             let mut pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
-                println!("opcode {} ", opcode);
+                println!("stack {} opcode {} ", self.local_stack().len(), opcode);
                 match opcode {
                     ACONST_NULL => {
                         self.local_stack().push(Value::Null);
@@ -171,12 +177,24 @@ impl Vm {
                     }
                     LDC => {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
-                        match method.constant_pool.get(&cp_index).unwrap() {
+                        let c = method.constant_pool.get(&cp_index).unwrap();
+                        println!("{:?}", c);
+                        match c {
                             CpEntry::Integer(i) => {
                                 self.local_stack().push(Value::I32(*i));
                             }
                             CpEntry::Float(f) => {
                                 self.local_stack().push(Value::F32(*f));
+                            }
+                            CpEntry::Double(d) => {
+                                self.local_stack().push(Value::F64(*d));
+                            }
+                            CpEntry::StringRef(utf8) => {
+                                let string = get_class(self, Some(&this_class.borrow().name), "java/lang/String").unwrap();
+                                self.local_stack().push(Value::Ref(Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Object::new(string)))))))
+                            }
+                            CpEntry::Long(l) => {
+                                self.local_stack().push(Value::I64(*l));
                             }
                             _ => {}
                         }
@@ -275,12 +293,14 @@ impl Vm {
                             borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
                         let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
                         let (name) = borrow.cp_utf8(name_index).unwrap();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let that = get_class(self, class_name.as_str())?;
-                        let borrow = that.borrow();
-                        let (_, val_index) = borrow.static_field_mapping.get(class_name).unwrap().get(name).unwrap();
-                        self.local_stack().push_arc(this_class.borrow().static_data.get(*val_index).unwrap().clone());
+
+                        let that_class_name_index = borrow.cp_class_ref(class_index).unwrap();
+                        let that_class_name = borrow.cp_utf8(that_class_name_index).unwrap();
+                        let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                        let that_borrow = that.borrow();
+                        let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
+                        println!("get static field {}", name);
+                        self.local_stack().push_arc(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
                     }
                     PUTSTATIC => {
                         println!("putstatic");
@@ -291,12 +311,21 @@ impl Vm {
                         let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
                         let (name) = borrow.cp_utf8(name_index).unwrap();
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let that = get_class(self, class_name.as_str())?;
-                        let that_borrow = that.borrow();
-                        let (_, val_index) = that_borrow.static_field_mapping.get(class_name).unwrap().get(name).unwrap();
-                        let value = self.local_stack().pop()?;
-                        borrow.static_data[*val_index] = value;
+                        println!("field {}", name);
+                        let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
+
+                        if &borrow.name == that_class_name {
+                            let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
+                            let val_index = *val_index;
+                            let value = self.local_stack().pop()?;
+                            borrow.static_data[val_index] = Some(value);
+                        } else {
+                            let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                            let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
+                            let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
+                            let value = self.local_stack().pop()?;
+                            borrow.static_data[*val_index] = Some(value);
+                        }
                     }
                     GETFIELD => unsafe {
                         let borrow = this_class.borrow();
@@ -347,6 +376,7 @@ impl Vm {
                             }
                             args.insert(0, self.local_stack().pop()?);
                             let mut return_value = self.execute(
+                                Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
@@ -369,6 +399,7 @@ impl Vm {
                                 args.insert(0, self.local_stack().pop()?);
                             }
                             let mut returnvalue = self.execute(
+                                Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
@@ -386,7 +417,7 @@ impl Vm {
                         let borrow = this_class.borrow();
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let class_to_instantiate = get_class(self, class_name)?;
+                        let class_to_instantiate = get_class(self, Some(&borrow.name), class_name)?;
 
                         let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
                             Vm::new_instance(class_to_instantiate),
