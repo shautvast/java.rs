@@ -226,7 +226,7 @@ fn read_attribute(
     *index += attribute_length;
 
     if let CpEntry::Utf8(s) = &constant_pool.get(&attribute_name_index).unwrap() {
-        println!("Att [{}]", s);
+        // println!("Att [{}]", s);
         return match s.as_str() {
             "ConstantValue" => {
                 assert_eq!(info.len(), 2);
@@ -274,6 +274,7 @@ fn read_attribute(
             "BootstrapMethods" => Some(("".into(), AttributeType::BootstrapMethods)), //stub
             "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),       //stub
             "Signature" => Some(("".into(), AttributeType::Signature)),       //stub
+            "NestHost" => Some(("".into(), AttributeType::NestHost)),       //stub
             //TODO more actual attribute implementations
             _ => None,
         };

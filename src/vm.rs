@@ -129,6 +129,7 @@ impl Vm {
                         self.local_stack().push(Value::I32(-1));
                     }
                     ICONST_0 => {
+                        println!("ICONST_0");
                         self.local_stack().push(Value::I32(0));
                     }
                     ICONST_1 => {
@@ -190,8 +191,14 @@ impl Vm {
                                 self.local_stack().push(Value::F64(*d));
                             }
                             CpEntry::StringRef(utf8) => {
-                                let string = get_class(self, Some(&this_class.borrow().name), "java/lang/String").unwrap();
-                                self.local_stack().push(Value::Ref(Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(Object::new(string)))))))
+                                //TODO
+                                let stringclass = get_class(self, Some(&this_class.borrow().name), "java/lang/String").unwrap();
+                                let stringinstance = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
+                                    Vm::new_instance(stringclass.clone()),
+                                ))));
+                                let string = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
+                                let s = self.execute_class(stringclass, "<init>", vec![Arc::new(UnsafeCell::new(Value::Utf8(string)))])?;
+                                self.local_stack().push(Value::Ref(stringinstance));
                             }
                             CpEntry::Long(l) => {
                                 self.local_stack().push(Value::I64(*l));
@@ -283,7 +290,7 @@ impl Vm {
                         return self.local_stack().pop();
                     }
                     RETURN_VOID => {
-                        self.stack.pop(); // Void is also returned as a value
+                        println!("RETURN");
                         return Ok(Value::void());
                     }
                     GETSTATIC => {
@@ -303,7 +310,7 @@ impl Vm {
                         self.local_stack().push_arc(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
                     }
                     PUTSTATIC => {
-                        println!("putstatic");
+                        println!("PUTSTATIC");
                         let mut borrow = this_class.borrow_mut();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
@@ -314,7 +321,7 @@ impl Vm {
                         println!("field {}", name);
                         let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
 
-                        if &borrow.name == that_class_name {
+                        if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
                             let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
                             let val_index = *val_index;
                             let value = self.local_stack().pop()?;
@@ -366,6 +373,8 @@ impl Vm {
                         }
                     },
                     INVOKEVIRTUAL | INVOKESPECIAL => unsafe {
+                        println!("INVOKE");
+                        // TODO differentiate these opcodes
                         let cp_index = read_u16(&code.opcodes, pc);
                         if let Some(invocation) =
                             get_signature_for_invoke(&method.constant_pool, cp_index)
@@ -413,6 +422,7 @@ impl Vm {
                         }
                     },
                     NEW => {
+                        println!("NEW");
                         let class_index = &read_u16(&code.opcodes, pc);
                         let borrow = this_class.borrow();
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
@@ -424,6 +434,26 @@ impl Vm {
                         ))));
                         self.local_stack().push(Value::Ref(Arc::clone(&object)));
                         self.heap.new_object(object);
+                    }
+                    ANEWARRAY => unsafe{
+                        println!("ANEWARRAY");
+                        let class_index = &read_u16(&code.opcodes, pc);
+                        let borrow = this_class.borrow();
+                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
+                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
+                        let arraytype = get_class(self, Some(&borrow.name), class_name)?;
+                        let count = self.local_stack().pop()?;
+                        if let Value::I32(count) = *count.get(){ // why does pop()?.get() give weird results?
+                            let array = ObjectRef::new_object_array(arraytype, count as usize);
+                            let array = Arc::new(UnsafeCell::new(array));
+
+                            self.local_stack().push(Value::Ref(Arc::clone(&array)));
+                            println!("{}",self.local_stack().len());
+                            self.heap.new_object(array);
+                        } else {
+                            panic!();
+                        }
+
                     }
 
                     //TODO implement all opcodes
@@ -470,9 +500,9 @@ impl Vm {
                     ObjectRef::DoubleArray(ref array) => {
                         self.local_stack().push(Value::F64(array[index]));
                     }
-                    ObjectRef::ObjectArray(ref array) => {
+                    ObjectRef::ObjectArray(_arraytype, ref data) => {
                         self.local_stack()
-                            .push(Value::Ref(array.get(index).unwrap().clone()));
+                             .push(Value::Ref(data[index].clone()));
                     }
                     ObjectRef::Object(_) => {} //throw error?
                 }
@@ -535,7 +565,7 @@ impl Vm {
                             array[*index as usize] = value
                         }
                     }
-                    ObjectRef::ObjectArray(ref mut array) => {
+                    ObjectRef::ObjectArray(arraytype, ref mut array) => {
                         if let Value::Ref(ref value) = *value.get() {
                             array[*index as usize] = value.clone();
                         }

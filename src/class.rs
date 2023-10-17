@@ -540,6 +540,7 @@ pub enum Value {
     BOOL(bool),
     CHAR(char),
     Ref(Arc<UnsafeCell<ObjectRef>>),
+    Utf8(String)
 }
 
 impl Value {
@@ -555,6 +556,7 @@ impl Into<UnsafeValue> for Value {
 }
 
 pub type UnsafeValue = Arc<UnsafeCell<Value>>;
+pub type Type = Arc<RefCell<Class>>;
 
 unsafe impl Send for Value {}
 

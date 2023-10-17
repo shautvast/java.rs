@@ -1,9 +1,9 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
-use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::class::{Class, UnsafeValue, Value};
+use crate::class::{Class, Type, UnsafeValue, Value};
+use crate::heap::ObjectRef::{IntArray, ObjectArray};
 
 // can contain object or array
 #[derive(Debug)]
@@ -16,8 +16,18 @@ pub enum ObjectRef {
     DoubleArray(Vec<f64>),
     BooleanArray(Vec<bool>),
     CharArray(Vec<char>),
-    ObjectArray(Vec<Arc<UnsafeCell<ObjectRef>>>),
+    ObjectArray(Type, Vec<Arc<UnsafeCell<ObjectRef>>>),
     Object(Box<Object>),
+}
+
+impl ObjectRef {
+    pub fn new_object_array(class: Type, size: usize) -> Self {
+        ObjectArray(class, Vec::with_capacity(size))
+    }
+
+    pub fn new_int_array(size: usize) -> Self {
+        IntArray(Vec::with_capacity(size))
+    }
 }
 
 // trying to implement efficient object instance storage
@@ -66,8 +76,8 @@ impl Object {
     }
 
     pub fn set(&mut self, class_name: &String, field_name: &String, value: UnsafeValue) {
-        let borrow =  self.class.borrow();
-        let (_type, index) =borrow
+        let borrow = self.class.borrow();
+        let (_type, index) = borrow
             .object_field_mapping
             .get(class_name)
             .unwrap()
@@ -77,8 +87,8 @@ impl Object {
     }
 
     pub fn get(&mut self, class_name: &String, field_name: &String) -> &UnsafeValue {
-        let borrow =  self.class.borrow();
-        let (_type, index) =borrow
+        let borrow = self.class.borrow();
+        let (_type, index) = borrow
             .object_field_mapping
             .get(class_name)
             .unwrap()
