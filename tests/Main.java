@@ -1,14 +1,14 @@
 public class Main {
 
-    final static int a;
+    final static String a;
 
     static{
-        a=1;
+        a="";
     }
 
    public static void main(String[] args){
         FloatBean f = new FloatBean();
         f.setValue(42F);
-
+        System.out.println(a);
    }
 }

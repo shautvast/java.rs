@@ -28,7 +28,8 @@ pub fn get_class(vm: &mut Vm, calling_class_name: Option<&str>, class_name: &str
         // not pretty...sorry
         if let Some(calling_class_name) = calling_class_name {
             if class_name == calling_class_name { // works around the situation that static initializer needs a ref to the class it's in
-                return Ok(CLASSDEFS.get(class_name.into()).unwrap().clone()); // in that case the class is guaranteed to be here
+                panic!();
+                // return Ok(CLASSDEFS.get(class_name.into()).unwrap().clone()); // in that case the class is guaranteed to be here
             }
         }
 
@@ -42,6 +43,8 @@ pub fn get_class(vm: &mut Vm, calling_class_name: Option<&str>, class_name: &str
             if let Some(super_class_name) = super_class_name {
                 if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
                     class.super_class = Some(super_class);
+                } else {
+                    unreachable!()
                 }
             }
 
@@ -57,11 +60,16 @@ pub fn get_class(vm: &mut Vm, calling_class_name: Option<&str>, class_name: &str
         // the problem is pretty fundamental: method (clinit) should be called before the class is returned,
         // but the executing code needs a reference to itself. So get_class is called recursively, but clinit must be called exactly once!
         // putting the call to clinit in the closure above is way nicer, but the signature change (wrap it in Arc<RefCell>)
-        if new_class.borrow().methods.contains_key("<clinit>()V") {
+        //update: this is probably not needed anymore because of the check in PUTSTATIC
+
+        //somehow this clone needs to be there before clinit is called, even though the newclass ref remains in scope
+        let clone = new_class.clone();
+
+        if  new_class.clone().borrow().methods.contains_key("<clinit>()V") {
             vm.execute_class(new_class.clone(), "<clinit>()V", vec![]).unwrap();
         }
 
-        Ok(new_class.clone())
+        Ok(clone)
     }
 }
 
@@ -125,11 +133,11 @@ impl Class {
     }
 
     pub(crate) fn n_object_fields(&self) -> usize {
-        self.object_field_mapping.iter().map(|(_,v)|v.len()).reduce(|acc, e| acc + e).unwrap()
+        self.object_field_mapping.iter().map(|(_, v)| v.len()).reduce(|acc, e| acc + e).unwrap()
     }
 
     pub(crate) fn n_static_fields(&self) -> usize {
-        self.static_field_mapping.iter().map(|(_,v)|v.len()).reduce(|acc, e| acc + e).unwrap()
+        self.static_field_mapping.iter().map(|(_, v)| v.len()).reduce(|acc, e| acc + e).unwrap()
     }
 
     // Create a mapping per field(name) to an index in the storage vector that contains the instance data.
@@ -194,7 +202,6 @@ impl Class {
                 ); //name => (type,index)
                 *object_field_map_index += 1;
             }
-
         }
         (this_fields, static_fields)
     }
@@ -242,7 +249,7 @@ impl Class {
                     "D" => Value::F64(0.0),
                     _ => Value::Null,
                 };
-                println!("{} = {:?}", name, value );
+                println!("{} = {:?}", name, value);
                 field_data[*index] = Some(value.into());
             }
         }
@@ -540,7 +547,7 @@ pub enum Value {
     BOOL(bool),
     CHAR(char),
     Ref(Arc<UnsafeCell<ObjectRef>>),
-    Utf8(String)
+    Utf8(String),
 }
 
 impl Value {

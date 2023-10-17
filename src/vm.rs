@@ -15,7 +15,7 @@ use crate::native::invoke_native;
 use crate::opcodes::*;
 
 #[derive(Debug)]
-struct StackFrame {
+pub(crate) struct StackFrame {
     at: String,
     data: Vec<UnsafeValue>,
 }
@@ -50,7 +50,7 @@ impl StackFrame {
 pub struct Vm {
     pub classpath: Vec<String>,
     heap: Heap,
-    stackframes: Vec<StackFrame>,
+    pub(crate) stackframes: Vec<StackFrame>,
 }
 
 #[cfg(target_family = "unix")]
@@ -133,6 +133,7 @@ impl Vm {
                         self.current_frame().push(Value::I32(0));
                     }
                     ICONST_1 => {
+                        println!("ICONST_1");
                         self.current_frame().push(Value::I32(1));
                     }
                     ICONST_2 => {
@@ -218,7 +219,7 @@ impl Vm {
                                 self.current_frame().push(Value::F32(*f));
                             }
                             _ => {
-                                panic!("unexpected")
+                                unreachable!()
                             }
                         }
                     }
@@ -233,7 +234,7 @@ impl Vm {
                                 self.current_frame().push(Value::I64(*l));
                             }
                             _ => {
-                                panic!("unexpected")
+                                unreachable!()
                             }
                         }
                     }
@@ -342,6 +343,16 @@ impl Vm {
                             let value = self.current_frame().pop()?;
                             borrow.static_data[*val_index] = Some(value);
                         }
+                        unsafe {
+                            for v in &borrow.static_data {
+                                let v = &*v.as_ref().unwrap().get();
+                                if let Value::Ref(vv) = v {
+                                    println!("{:?}", &*vv.get())
+                                } else {
+                                    println!("{:?}", *v);
+                                }
+                            }
+                        }
                     }
                     GETFIELD => unsafe {
                         let borrow = this_class.borrow();
@@ -359,7 +370,11 @@ impl Vm {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 let value = object.get(class_name, field_name);
                                 self.current_frame().push_arc(Arc::clone(value));
+                            } else {
+                                unreachable!()
                             }
+                        } else {
+                            unreachable!()
                         }
                     },
                     PUTFIELD => unsafe {
@@ -379,6 +394,8 @@ impl Vm {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 object.set(class_name, field_name, value);
                             }
+                        } else {
+                            unreachable!()
                         }
                     },
                     INVOKEVIRTUAL | INVOKESPECIAL => unsafe {
@@ -406,6 +423,8 @@ impl Vm {
                                 }
                             }
                             println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
+                        } else {
+                            unreachable!()
                         }
                     },
                     INVOKESTATIC => unsafe {
@@ -429,6 +448,8 @@ impl Vm {
                                     self.current_frame().push_arc(returnvalue.clone());
                                 }
                             }
+                        } else {
+                            unreachable!()
                         }
                     },
                     NEW => {
@@ -445,7 +466,7 @@ impl Vm {
                         self.current_frame().push(Value::Ref(Arc::clone(&object)));
                         self.heap.new_object(object);
                     }
-                    ANEWARRAY => unsafe{
+                    ANEWARRAY => unsafe {
                         println!("ANEWARRAY");
                         let class_index = &read_u16(&code.opcodes, pc);
                         let borrow = this_class.borrow();
@@ -453,17 +474,16 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let arraytype = get_class(self, Some(&borrow.name), class_name)?;
                         let count = self.current_frame().pop()?;
-                        if let Value::I32(count) = *count.get(){ // why does pop()?.get() give weird results?
+                        if let Value::I32(count) = *count.get() { // why does pop()?.get() give weird results?
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
                             let array = Arc::new(UnsafeCell::new(array));
 
                             self.current_frame().push(Value::Ref(Arc::clone(&array)));
-                            println!("{}",self.current_frame().len());
+                            println!("{}", self.current_frame().len());
                             self.heap.new_object(array);
                         } else {
                             panic!();
                         }
-
                     }
 
                     //TODO implement all opcodes
@@ -478,43 +498,45 @@ impl Vm {
     }
 
     unsafe fn array_load(&mut self) -> Result<(), Error> {
-        if let Value::I32(index) = &*self.current_frame().pop()?.get() {
+        let value = self.current_frame().pop()?;
+
+        if let Value::I32(index) = &*value.get() {
             let index = *index as usize;
-            let arrayref = &*self.current_frame().pop()?.get();
-            if let Value::Null = arrayref {
+            let arrayref = self.current_frame().pop()?;
+            if let Value::Null = &*arrayref.get() {
                 return Err(anyhow!("NullpointerException"));
             }
-            if let Value::Ref(ref objectref) = arrayref {
+            if let Value::Ref(objectref) = &*arrayref.get() {
                 match &*objectref.get() {
-                    ObjectRef::ByteArray(ref array) => {
+                    ObjectRef::ByteArray(array) => {
                         self.current_frame().push(Value::I32(array[index] as i32));
                     }
-                    ObjectRef::ShortArray(ref array) => {
+                    ObjectRef::ShortArray(array) => {
                         self.current_frame().push(Value::I32(array[index] as i32));
                     }
-                    ObjectRef::IntArray(ref array) => {
+                    ObjectRef::IntArray(array) => {
                         self.current_frame().push(Value::I32(array[index]));
                     }
-                    ObjectRef::BooleanArray(ref array) => {
+                    ObjectRef::BooleanArray(array) => {
                         self.current_frame().push(Value::I32(array[index] as i32));
                     }
-                    ObjectRef::CharArray(ref array) => {
+                    ObjectRef::CharArray(array) => {
                         self.current_frame().push(Value::CHAR(array[index]));
                     }
-                    ObjectRef::LongArray(ref array) => {
+                    ObjectRef::LongArray(array) => {
                         self.current_frame().push(Value::I64(array[index]));
                     }
-                    ObjectRef::FloatArray(ref array) => {
+                    ObjectRef::FloatArray(array) => {
                         self.current_frame().push(Value::F32(array[index]));
                     }
-                    ObjectRef::DoubleArray(ref array) => {
+                    ObjectRef::DoubleArray(array) => {
                         self.current_frame().push(Value::F64(array[index]));
                     }
-                    ObjectRef::ObjectArray(_arraytype, ref data) => {
+                    ObjectRef::ObjectArray(_arraytype, data) => {
                         self.current_frame()
-                             .push(Value::Ref(data[index].clone()));
+                            .push(Value::Ref(data[index].clone()));
                     }
-                    ObjectRef::Object(_) => {} //throw error?
+                    ObjectRef::Object(_) => { panic!("should be array") } //throw error?
                 }
             }
         }
@@ -523,66 +545,86 @@ impl Vm {
 
     unsafe fn array_store(&mut self) -> Result<(), Error> {
         let value = self.current_frame().pop()?;
-        let index = &mut *self.current_frame().pop()?.get();
-        let mut arrayref = &mut *self.current_frame().pop()?.get();
+        let index = &*self.current_frame().pop()?;
+        let mut arrayref = &mut self.current_frame().pop()?;
 
-        if let Value::Null = arrayref {
+        if let Value::Null = &*arrayref.get() {
             return Err(anyhow!("NullpointerException"));
         }
 
-        if let Value::I32(index) = index {
-            if let Value::Ref(ref mut objectref) = arrayref {
+        if let Value::I32(index) = &*index.get() {
+            if let Value::Ref(ref mut objectref) = &mut *arrayref.get() {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
                         if let Value::I32(value) = *value.get() {
                             // is i32 correct?
                             array[*index as usize] = value as i8;
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
                         if let Value::I32(value) = *value.get() {
                             // is i32 correct?
                             array[*index as usize] = value as i16;
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::IntArray(ref mut array) => {
                         if let Value::I32(value) = *value.get() {
                             array[*index as usize] = value;
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::BooleanArray(ref mut array) => {
                         if let Value::I32(value) = *value.get() {
                             array[*index as usize] = value > 0;
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::CharArray(ref mut array) => {
                         if let Value::I32(value) = *value.get() {
                             array[*index as usize] = char::from_u32_unchecked(value as u32);
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::LongArray(ref mut array) => {
                         if let Value::I64(value) = *value.get() {
                             array[*index as usize] = value;
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::FloatArray(ref mut array) => {
                         if let Value::F32(value) = *value.get() {
                             array[*index as usize] = value
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::DoubleArray(ref mut array) => {
                         if let Value::F64(value) = *value.get() {
                             array[*index as usize] = value
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::ObjectArray(arraytype, ref mut array) => {
                         if let Value::Ref(ref value) = *value.get() {
                             array[*index as usize] = value.clone();
+                        } else {
+                            unreachable!()
                         }
                     }
                     ObjectRef::Object(_) => {} //throw error?
                 }
             }
+        } else {
+            unreachable!()
         }
         Ok(())
     }

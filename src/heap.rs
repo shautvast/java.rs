@@ -1,12 +1,12 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use crate::class::{Class, Type, UnsafeValue, Value};
 use crate::heap::ObjectRef::{IntArray, ObjectArray};
 
 // can contain object or array
-#[derive(Debug)]
 pub enum ObjectRef {
     ByteArray(Vec<i8>),
     ShortArray(Vec<i16>),
@@ -27,6 +27,23 @@ impl ObjectRef {
 
     pub fn new_int_array(size: usize) -> Self {
         IntArray(Vec::with_capacity(size))
+    }
+}
+
+impl Debug for ObjectRef{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ObjectRef::BooleanArray(d) => write!(f, "[Z;{}]", d.len()),
+            ObjectRef::ByteArray(d) => write!(f, "[B;{}]", d.len()),
+            ObjectRef::CharArray(d) => write!(f, "[C;{}]", d.len()),
+            ObjectRef::DoubleArray(d) => write!(f, "[D;{}]", d.len()),
+            ObjectRef::FloatArray(d) => write!(f, "[F;{}]", d.len()),
+            ObjectRef::IntArray(d) => write!(f, "[I;{}]", d.len()),
+            ObjectRef::LongArray(d) => write!(f, "[J;{}]", d.len()),
+            ObjectRef::ObjectArray(t, d) => write!(f,"[L{};{}]", t.borrow().name,d.len()),
+            ObjectRef::ShortArray( d) => write!(f, "[S;{}]", d.len()),
+            ObjectRef::Object( r) => write!(f,"{}{{ {:?} }}", r.class.borrow().name, r.data),
+        }
     }
 }
 
