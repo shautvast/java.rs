@@ -1,9 +1,9 @@
 public class Main {
 
-    final static String a;
+    final static int a;
 
     static{
-        a="";
+        a=1;
     }
 
    public static void main(String[] args){

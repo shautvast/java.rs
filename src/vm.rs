@@ -50,7 +50,7 @@ impl StackFrame {
 pub struct Vm {
     pub classpath: Vec<String>,
     heap: Heap,
-    stack: Vec<StackFrame>,
+    stackframes: Vec<StackFrame>,
 }
 
 #[cfg(target_family = "unix")]
@@ -63,9 +63,9 @@ const PATH_SEPARATOR: char = ';';
 //TODO goto
 //TODO error handling
 impl Vm {
-    fn local_stack(&mut self) -> &mut StackFrame {
-        let i = self.stack.len() - 1;
-        self.stack.get_mut(i).unwrap()
+    fn current_frame(&mut self) -> &mut StackFrame {
+        let i = self.stackframes.len() - 1;
+        self.stackframes.get_mut(i).unwrap()
     }
 
     pub fn new(classpath: &'static str) -> Self {
@@ -75,7 +75,7 @@ impl Vm {
                 .map(|s| s.to_owned())
                 .collect(),
             heap: Heap::new(),
-            stack: vec![],
+            stackframes: vec![],
         }
     }
 
@@ -115,80 +115,81 @@ impl Vm {
         }
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
             let stackframe = StackFrame::new(&this_class.borrow().name, &method.name());
-            self.stack.push(stackframe);
+            self.stackframes.push(stackframe);
 
             let mut pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
-                println!("stack {} opcode {} ", self.local_stack().len(), opcode);
+                println!("stack {} opcode {} ", self.current_frame().len(), opcode);
                 match opcode {
                     ACONST_NULL => {
-                        self.local_stack().push(Value::Null);
+                        self.current_frame().push(Value::Null);
                     }
                     ICONST_M1 => {
-                        self.local_stack().push(Value::I32(-1));
+                        self.current_frame().push(Value::I32(-1));
                     }
                     ICONST_0 => {
                         println!("ICONST_0");
-                        self.local_stack().push(Value::I32(0));
+                        self.current_frame().push(Value::I32(0));
                     }
                     ICONST_1 => {
-                        self.local_stack().push(Value::I32(1));
+                        self.current_frame().push(Value::I32(1));
                     }
                     ICONST_2 => {
-                        self.local_stack().push(Value::I32(2));
+                        self.current_frame().push(Value::I32(2));
                     }
                     ICONST_3 => {
-                        self.local_stack().push(Value::I32(3));
+                        self.current_frame().push(Value::I32(3));
                     }
                     ICONST_4 => {
-                        self.local_stack().push(Value::I32(4));
+                        self.current_frame().push(Value::I32(4));
                     }
                     ICONST_5 => {
-                        self.local_stack().push(Value::I32(5));
+                        self.current_frame().push(Value::I32(5));
                     }
                     LCONST_0 => {
-                        self.local_stack().push(Value::I64(0));
+                        self.current_frame().push(Value::I64(0));
                     }
                     LCONST_1 => {
-                        self.local_stack().push(Value::I64(1));
+                        self.current_frame().push(Value::I64(1));
                     }
                     FCONST_0 => {
-                        self.local_stack().push(Value::F32(0.0));
+                        self.current_frame().push(Value::F32(0.0));
                     }
                     FCONST_1 => {
-                        self.local_stack().push(Value::F32(1.0));
+                        self.current_frame().push(Value::F32(1.0));
                     }
                     FCONST_2 => {
-                        self.local_stack().push(Value::F32(2.0));
+                        self.current_frame().push(Value::F32(2.0));
                     }
                     DCONST_0 => {
-                        self.local_stack().push(Value::F64(0.0));
+                        self.current_frame().push(Value::F64(0.0));
                     }
                     DCONST_1 => {
-                        self.local_stack().push(Value::F64(1.0));
+                        self.current_frame().push(Value::F64(1.0));
                     }
                     SIPUSH => {
                         let s = read_u16(&code.opcodes, pc) as i32;
-                        self.local_stack().push(Value::I32(s));
+                        self.current_frame().push(Value::I32(s));
                     }
                     BIPUSH => {
                         let c = read_u8(&code.opcodes, pc) as i32;
-                        self.local_stack().push(Value::I32(c));
+                        self.current_frame().push(Value::I32(c));
                     }
                     LDC => {
+                        println!("LDC");
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
                         let c = method.constant_pool.get(&cp_index).unwrap();
                         println!("{:?}", c);
                         match c {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Value::I32(*i));
+                                self.current_frame().push(Value::I32(*i));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Value::F32(*f));
+                                self.current_frame().push(Value::F32(*f));
                             }
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Value::F64(*d));
+                                self.current_frame().push(Value::F64(*d));
                             }
                             CpEntry::StringRef(utf8) => {
                                 //TODO
@@ -198,22 +199,23 @@ impl Vm {
                                 ))));
                                 let string = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
                                 let s = self.execute_class(stringclass, "<init>", vec![Arc::new(UnsafeCell::new(Value::Utf8(string)))])?;
-                                self.local_stack().push(Value::Ref(stringinstance));
+                                self.current_frame().push(Value::Ref(stringinstance));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Value::I64(*l));
+                                self.current_frame().push(Value::I64(*l));
                             }
                             _ => {}
                         }
                     }
                     LDC_W => {
+                        println!("LDC_W");
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.local_stack().push(Value::I32(*i));
+                                self.current_frame().push(Value::I32(*i));
                             }
                             CpEntry::Float(f) => {
-                                self.local_stack().push(Value::F32(*f));
+                                self.current_frame().push(Value::F32(*f));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -221,13 +223,14 @@ impl Vm {
                         }
                     }
                     LDC2_W => {
+                        println!("LDC2_W");
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Double(d) => {
-                                self.local_stack().push(Value::F64(*d));
+                                self.current_frame().push(Value::F64(*d));
                             }
                             CpEntry::Long(l) => {
-                                self.local_stack().push(Value::I64(*l));
+                                self.current_frame().push(Value::I64(*l));
                             }
                             _ => {
                                 panic!("unexpected")
@@ -237,23 +240,24 @@ impl Vm {
                     ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => {
                         // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
-                        self.local_stack()
+                        self.current_frame()
                             .push_arc(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
-                        self.local_stack()
+                        println!("LOAD");
+                        self.current_frame()
                             .push_arc(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
-                        self.local_stack()
+                        self.current_frame()
                             .push_arc(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
-                        self.local_stack()
+                        self.current_frame()
                             .push_arc(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
-                        self.local_stack()
+                        self.current_frame()
                             .push_arc(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
@@ -267,6 +271,7 @@ impl Vm {
                         self.store(&mut local_params, 0)?;
                     }
                     ISTORE_1 | LSTORE_1 | DSTORE_1 | ASTORE_1 | FSTORE_1 => {
+                        println!("STORE");
                         self.store(&mut local_params, 1)?;
                     }
                     ISTORE_2 | LSTORE_2 | DSTORE_2 | ASTORE_2 | FSTORE_2 => {
@@ -278,19 +283,23 @@ impl Vm {
                     BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
                     | AASTORE => unsafe { self.array_store()? },
                     POP => {
-                        self.local_stack().pop()?;
+                        self.current_frame().pop()?;
                     }
                     DUP => {
-                        let value = self.local_stack().pop()?;
+                        let value = self.current_frame().pop()?;
                         println!("{:?}", value);
-                        self.local_stack().push_arc(value.clone());
-                        self.local_stack().push_arc(value);
+                        self.current_frame().push_arc(value.clone());
+                        self.current_frame().push_arc(value);
                     }
                     IRETURN | FRETURN | DRETURN => {
-                        return self.local_stack().pop();
+                        println!("RETURN");
+                        let result = self.current_frame().pop();
+                        self.stackframes.pop();
+                        return result;
                     }
                     RETURN_VOID => {
-                        println!("RETURN");
+                        println!("RETURN void");
+                        self.stackframes.pop();
                         return Ok(Value::void());
                     }
                     GETSTATIC => {
@@ -307,7 +316,7 @@ impl Vm {
                         let that_borrow = that.borrow();
                         let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
                         println!("get static field {}", name);
-                        self.local_stack().push_arc(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
+                        self.current_frame().push_arc(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
                     }
                     PUTSTATIC => {
                         println!("PUTSTATIC");
@@ -324,13 +333,13 @@ impl Vm {
                         if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
                             let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
                             let val_index = *val_index;
-                            let value = self.local_stack().pop()?;
+                            let value = self.current_frame().pop()?;
                             borrow.static_data[val_index] = Some(value);
                         } else {
                             let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
                             let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
                             let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
-                            let value = self.local_stack().pop()?;
+                            let value = self.current_frame().pop()?;
                             borrow.static_data[*val_index] = Some(value);
                         }
                     }
@@ -345,11 +354,11 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let field_name = borrow.cp_utf8(field_name_index).unwrap();
 
-                        let mut objectref = self.local_stack().pop()?;
+                        let mut objectref = self.current_frame().pop()?;
                         if let Value::Ref(instance) = &mut *objectref.get() {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 let value = object.get(class_name, field_name);
-                                self.local_stack().push_arc(Arc::clone(value));
+                                self.current_frame().push_arc(Arc::clone(value));
                             }
                         }
                     },
@@ -364,8 +373,8 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let field_name = borrow.cp_utf8(field_name_index).unwrap();
 
-                        let value = self.local_stack().pop()?;
-                        let mut objectref = self.local_stack().pop()?;
+                        let value = self.current_frame().pop()?;
+                        let mut objectref = self.current_frame().pop()?;
                         if let Value::Ref(instance) = &mut *objectref.get() {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 object.set(class_name, field_name, value);
@@ -381,9 +390,9 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, self.local_stack().pop()?);
+                                args.insert(0, self.current_frame().pop()?);
                             }
-                            args.insert(0, self.local_stack().pop()?);
+                            args.insert(0, self.current_frame().pop()?);
                             let mut return_value = self.execute(
                                 Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
@@ -393,9 +402,10 @@ impl Vm {
                             match *return_value.get() {
                                 Void => {}
                                 _ => {
-                                    self.local_stack().push_arc(return_value.clone());
+                                    self.current_frame().push_arc(return_value.clone());
                                 }
                             }
+                            println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
                         }
                     },
                     INVOKESTATIC => unsafe {
@@ -405,7 +415,7 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, self.local_stack().pop()?);
+                                args.insert(0, self.current_frame().pop()?);
                             }
                             let mut returnvalue = self.execute(
                                 Some(this_class.borrow().name.as_str()),
@@ -416,7 +426,7 @@ impl Vm {
                             match *returnvalue.get() {
                                 Void => {}
                                 _ => {
-                                    self.local_stack().push_arc(returnvalue.clone());
+                                    self.current_frame().push_arc(returnvalue.clone());
                                 }
                             }
                         }
@@ -432,7 +442,7 @@ impl Vm {
                         let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
                             Vm::new_instance(class_to_instantiate),
                         ))));
-                        self.local_stack().push(Value::Ref(Arc::clone(&object)));
+                        self.current_frame().push(Value::Ref(Arc::clone(&object)));
                         self.heap.new_object(object);
                     }
                     ANEWARRAY => unsafe{
@@ -442,13 +452,13 @@ impl Vm {
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let arraytype = get_class(self, Some(&borrow.name), class_name)?;
-                        let count = self.local_stack().pop()?;
+                        let count = self.current_frame().pop()?;
                         if let Value::I32(count) = *count.get(){ // why does pop()?.get() give weird results?
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
                             let array = Arc::new(UnsafeCell::new(array));
 
-                            self.local_stack().push(Value::Ref(Arc::clone(&array)));
-                            println!("{}",self.local_stack().len());
+                            self.current_frame().push(Value::Ref(Arc::clone(&array)));
+                            println!("{}",self.current_frame().len());
                             self.heap.new_object(array);
                         } else {
                             panic!();
@@ -458,7 +468,7 @@ impl Vm {
 
                     //TODO implement all opcodes
                     _ => {
-                        panic!("opcode not implemented {:?}", self.stack)
+                        panic!("opcode not implemented {:?}", self.stackframes)
                         //TODO implement proper --stacktraces-- error handling
                     }
                 }
@@ -468,40 +478,40 @@ impl Vm {
     }
 
     unsafe fn array_load(&mut self) -> Result<(), Error> {
-        if let Value::I32(index) = &*self.local_stack().pop()?.get() {
+        if let Value::I32(index) = &*self.current_frame().pop()?.get() {
             let index = *index as usize;
-            let arrayref = &*self.local_stack().pop()?.get();
+            let arrayref = &*self.current_frame().pop()?.get();
             if let Value::Null = arrayref {
                 return Err(anyhow!("NullpointerException"));
             }
             if let Value::Ref(ref objectref) = arrayref {
                 match &*objectref.get() {
                     ObjectRef::ByteArray(ref array) => {
-                        self.local_stack().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(Value::I32(array[index] as i32));
                     }
                     ObjectRef::ShortArray(ref array) => {
-                        self.local_stack().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(Value::I32(array[index] as i32));
                     }
                     ObjectRef::IntArray(ref array) => {
-                        self.local_stack().push(Value::I32(array[index]));
+                        self.current_frame().push(Value::I32(array[index]));
                     }
                     ObjectRef::BooleanArray(ref array) => {
-                        self.local_stack().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(Value::I32(array[index] as i32));
                     }
                     ObjectRef::CharArray(ref array) => {
-                        self.local_stack().push(Value::CHAR(array[index]));
+                        self.current_frame().push(Value::CHAR(array[index]));
                     }
                     ObjectRef::LongArray(ref array) => {
-                        self.local_stack().push(Value::I64(array[index]));
+                        self.current_frame().push(Value::I64(array[index]));
                     }
                     ObjectRef::FloatArray(ref array) => {
-                        self.local_stack().push(Value::F32(array[index]));
+                        self.current_frame().push(Value::F32(array[index]));
                     }
                     ObjectRef::DoubleArray(ref array) => {
-                        self.local_stack().push(Value::F64(array[index]));
+                        self.current_frame().push(Value::F64(array[index]));
                     }
                     ObjectRef::ObjectArray(_arraytype, ref data) => {
-                        self.local_stack()
+                        self.current_frame()
                              .push(Value::Ref(data[index].clone()));
                     }
                     ObjectRef::Object(_) => {} //throw error?
@@ -512,9 +522,9 @@ impl Vm {
     }
 
     unsafe fn array_store(&mut self) -> Result<(), Error> {
-        let value = self.local_stack().pop()?;
-        let index = &mut *self.local_stack().pop()?.get();
-        let mut arrayref = &mut *self.local_stack().pop()?.get();
+        let value = self.current_frame().pop()?;
+        let index = &mut *self.current_frame().pop()?.get();
+        let mut arrayref = &mut *self.current_frame().pop()?.get();
 
         if let Value::Null = arrayref {
             return Err(anyhow!("NullpointerException"));
@@ -582,7 +592,7 @@ impl Vm {
         local_params: &mut Vec<Option<UnsafeValue>>,
         index: usize,
     ) -> Result<(), Error> {
-        let value = self.local_stack().pop()?;
+        let value = self.current_frame().pop()?;
         while local_params.len() < index + 1 {
             local_params.push(None);
         }
