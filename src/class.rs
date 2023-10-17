@@ -562,6 +562,7 @@ impl Into<UnsafeValue> for Value {
 }
 
 pub type UnsafeValue = Arc<UnsafeCell<Value>>;
+
 pub type UnsafeRef = Arc<UnsafeCell<ObjectRef>>;
 
 pub fn unsafe_ref(object: ObjectRef) -> UnsafeRef{

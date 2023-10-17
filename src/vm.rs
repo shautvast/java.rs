@@ -1,14 +1,14 @@
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::rc::Rc;
-use std::string;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 
+use Value::{*};
+
 use crate::class::{AttributeType, Class, get_class, Modifier, unsafe_ref, unsafe_val, UnsafeValue, Value};
-use crate::class::Value::Void;
+use crate::class::Value::{Null, Void};
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
@@ -127,27 +127,27 @@ impl Vm {
                         self.current_frame().push(Value::Null);
                     }
                     ICONST_M1 => {
-                        self.current_frame().push(Value::I32(-1));
+                        self.current_frame().push(I32(-1));
                     }
                     ICONST_0 => {
                         println!("ICONST_0");
-                        self.current_frame().push(Value::I32(0));
+                        self.current_frame().push(I32(0));
                     }
                     ICONST_1 => {
                         println!("ICONST_1");
-                        self.current_frame().push(Value::I32(1));
+                        self.current_frame().push(I32(1));
                     }
                     ICONST_2 => {
-                        self.current_frame().push(Value::I32(2));
+                        self.current_frame().push(I32(2));
                     }
                     ICONST_3 => {
-                        self.current_frame().push(Value::I32(3));
+                        self.current_frame().push(I32(3));
                     }
                     ICONST_4 => {
-                        self.current_frame().push(Value::I32(4));
+                        self.current_frame().push(I32(4));
                     }
                     ICONST_5 => {
-                        self.current_frame().push(Value::I32(5));
+                        self.current_frame().push(I32(5));
                     }
                     LCONST_0 => {
                         self.current_frame().push(Value::I64(0));
@@ -172,11 +172,11 @@ impl Vm {
                     }
                     SIPUSH => {
                         let s = read_u16(&code.opcodes, pc) as i32;
-                        self.current_frame().push(Value::I32(s));
+                        self.current_frame().push(I32(s));
                     }
                     BIPUSH => {
                         let c = read_u8(&code.opcodes, pc) as i32;
-                        self.current_frame().push(Value::I32(c));
+                        self.current_frame().push(I32(c));
                     }
                     LDC => {
                         println!("LDC");
@@ -185,7 +185,7 @@ impl Vm {
                         println!("{:?}", c);
                         match c {
                             CpEntry::Integer(i) => {
-                                self.current_frame().push(Value::I32(*i));
+                                self.current_frame().push(I32(*i));
                             }
                             CpEntry::Float(f) => {
                                 self.current_frame().push(Value::F32(*f));
@@ -217,7 +217,7 @@ impl Vm {
                         let cp_index = read_u16(&code.opcodes, pc);
                         match method.constant_pool.get(&cp_index).unwrap() {
                             CpEntry::Integer(i) => {
-                                self.current_frame().push(Value::I32(*i));
+                                self.current_frame().push(I32(*i));
                             }
                             CpEntry::Float(f) => {
                                 self.current_frame().push(Value::F32(*f));
@@ -411,7 +411,7 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, self.current_frame().pop()?);
+                                args.insert(0, copy(self.current_frame().pop()?));
                             }
                             args.insert(0, self.current_frame().pop()?);
                             let mut return_value = self.execute(
@@ -438,7 +438,7 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, self.current_frame().pop()?);
+                                args.insert(0, copy(self.current_frame().pop()?));
                             }
                             let mut returnvalue = self.execute(
                                 Some(this_class.borrow().name.as_str()),
@@ -478,7 +478,7 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let arraytype = get_class(self, Some(&borrow.name), class_name)?;
                         let count = self.current_frame().pop()?;
-                        if let Value::I32(count) = *count.get() { // why does pop()?.get() give weird results?
+                        if let I32(count) = *count.get() { // why does pop()?.get() give weird results?
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
                             let array = unsafe_ref(array);
 
@@ -504,7 +504,7 @@ impl Vm {
     unsafe fn array_load(&mut self) -> Result<(), Error> {
         let value = self.current_frame().pop()?;
 
-        if let Value::I32(index) = &*value.get() {
+        if let I32(index) = &*value.get() {
             let index = *index as usize;
             let arrayref = self.current_frame().pop()?;
             if let Value::Null = &*arrayref.get() {
@@ -513,19 +513,19 @@ impl Vm {
             if let Value::Ref(objectref) = &*arrayref.get() {
                 match &*objectref.get() {
                     ObjectRef::ByteArray(array) => {
-                        self.current_frame().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(I32(array[index] as i32));
                     }
                     ObjectRef::ShortArray(array) => {
-                        self.current_frame().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(I32(array[index] as i32));
                     }
                     ObjectRef::IntArray(array) => {
-                        self.current_frame().push(Value::I32(array[index]));
+                        self.current_frame().push(I32(array[index]));
                     }
                     ObjectRef::BooleanArray(array) => {
-                        self.current_frame().push(Value::I32(array[index] as i32));
+                        self.current_frame().push(I32(array[index] as i32));
                     }
                     ObjectRef::CharArray(array) => {
-                        self.current_frame().push(Value::CHAR(array[index]));
+                        self.current_frame().push(CHAR(array[index]));
                     }
                     ObjectRef::LongArray(array) => {
                         self.current_frame().push(Value::I64(array[index]));
@@ -556,11 +556,11 @@ impl Vm {
             return Err(anyhow!("NullpointerException"));
         }
 
-        if let Value::I32(index) = &*index.get() {
+        if let I32(index) = &*index.get() {
             if let Value::Ref(ref mut objectref) = &mut *arrayref.get() {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() {
+                        if let I32(value) = *value.get() {
                             // is i32 correct?
                             array[*index as usize] = value as i8;
                         } else {
@@ -568,7 +568,7 @@ impl Vm {
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() {
+                        if let I32(value) = *value.get() {
                             // is i32 correct?
                             array[*index as usize] = value as i16;
                         } else {
@@ -576,21 +576,21 @@ impl Vm {
                         }
                     }
                     ObjectRef::IntArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() {
+                        if let I32(value) = *value.get() {
                             array[*index as usize] = value;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::BooleanArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() {
+                        if let I32(value) = *value.get() {
                             array[*index as usize] = value > 0;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::CharArray(ref mut array) => {
-                        if let Value::I32(value) = *value.get() {
+                        if let I32(value) = *value.get() {
                             array[*index as usize] = char::from_u32_unchecked(value as u32);
                         } else {
                             unreachable!()
@@ -674,6 +674,21 @@ fn get_signature_for_invoke(cp: &Rc<HashMap<u16, CpEntry>>, index: u16) -> Optio
         }
     }
     None
+}
+
+unsafe fn copy(value: UnsafeValue) -> UnsafeValue {
+    unsafe_val(match (&*value.get()) {
+        Void => Void,
+        Null => Null,
+        BOOL(b)=> BOOL(*b),
+        CHAR(c)=> CHAR(*c),
+        I32(i)=> I32(*i),
+        I64(l)=> I64(*l),
+        F32(f)=> F32(*f),
+        F64(d)=> F64(*d),
+        Ref(r)=> Ref(r.clone()),
+        Utf8(s)=> Utf8(s.to_owned()),
+    })
 }
 
 fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<MethodSignature> {
