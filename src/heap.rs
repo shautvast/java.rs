@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use crate::class::{Class, Type, UnsafeValue, Value};
-use crate::heap::ObjectRef::{IntArray, ObjectArray};
+use crate::heap::ObjectRef::{ByteArray, IntArray, ObjectArray};
 
 // can contain object or array
 pub enum ObjectRef {
@@ -20,6 +20,23 @@ pub enum ObjectRef {
     Object(Box<Object>),
 }
 
+fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
+    // ideally we'd use Vec::into_raw_parts, but it's unstable,
+    // so we have to do it manually:
+
+    // first, make sure v's destructor doesn't free the data
+    // it thinks it owns when it goes out of scope
+    let mut v = std::mem::ManuallyDrop::new(v);
+
+    // then, pick apart the existing Vec
+    let p = v.as_mut_ptr();
+    let len = v.len();
+    let cap = v.capacity();
+
+    // finally, adopt the data into a new Vec
+    unsafe { Vec::from_raw_parts(p as *mut i8, len, cap) }
+}
+
 impl ObjectRef {
     pub fn new_object_array(class: Type, size: usize) -> Self {
         ObjectArray(class, Vec::with_capacity(size))
@@ -27,6 +44,10 @@ impl ObjectRef {
 
     pub fn new_int_array(size: usize) -> Self {
         IntArray(Vec::with_capacity(size))
+    }
+
+    pub fn new_byte_array(d: Vec<u8>) -> Arc<UnsafeCell<Self>> {
+        Arc::new(UnsafeCell::new(ByteArray(into_vec_i8(d))))
     }
 }
 

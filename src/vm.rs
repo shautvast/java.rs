@@ -2,11 +2,12 @@ use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::string;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 
-use crate::class::{AttributeType, Class, get_class, Modifier, UnsafeValue, Value};
+use crate::class::{AttributeType, Class, get_class, Modifier, unsafe_ref, unsafe_val, UnsafeValue, Value};
 use crate::class::Value::Void;
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
@@ -30,10 +31,10 @@ impl StackFrame {
     }
 
     fn push(&mut self, val: Value) {
-        self.data.push(Arc::new(UnsafeCell::new(val)));
+        self.data.push(unsafe_val(val));
     }
 
-    fn push_arc(&mut self, val: UnsafeValue) {
+    fn push_ref(&mut self, val: UnsafeValue) {
         self.data.push(val);
     }
 
@@ -195,12 +196,15 @@ impl Vm {
                             CpEntry::StringRef(utf8) => {
                                 //TODO
                                 let stringclass = get_class(self, Some(&this_class.borrow().name), "java/lang/String").unwrap();
-                                let stringinstance = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
-                                    Vm::new_instance(stringclass.clone()),
-                                ))));
-                                let string = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
-                                let s = self.execute_class(stringclass, "<init>", vec![Arc::new(UnsafeCell::new(Value::Utf8(string)))])?;
-                                self.current_frame().push(Value::Ref(stringinstance));
+                                let stringinstance = unsafe_val(
+                                    Value::Ref(unsafe_ref(ObjectRef::Object(Box::new(
+                                        Vm::new_instance(stringclass.clone()))))));
+                                let string: Vec<u8> = this_class.borrow().cp_utf8(utf8).unwrap().to_owned().as_bytes().into();
+
+                                self.execute_class(stringclass, "<init>([B)V",
+                                                   vec![stringinstance.clone(),
+                                                        unsafe_val(Value::Ref(ObjectRef::new_byte_array(string)))])?;
+                                self.current_frame().push_ref(stringinstance);
                             }
                             CpEntry::Long(l) => {
                                 self.current_frame().push(Value::I64(*l));
@@ -242,24 +246,24 @@ impl Vm {
                         // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
                         self.current_frame()
-                            .push_arc(local_params[n].as_ref().unwrap().clone());
+                            .push_ref(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
                         println!("LOAD");
                         self.current_frame()
-                            .push_arc(local_params[0].as_ref().unwrap().clone());
+                            .push_ref(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
                         self.current_frame()
-                            .push_arc(local_params[1].as_ref().unwrap().clone());
+                            .push_ref(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
                         self.current_frame()
-                            .push_arc(local_params[2].as_ref().unwrap().clone());
+                            .push_ref(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
                         self.current_frame()
-                            .push_arc(local_params[3].as_ref().unwrap().clone());
+                            .push_ref(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
                         self.array_load()?;
@@ -289,8 +293,8 @@ impl Vm {
                     DUP => {
                         let value = self.current_frame().pop()?;
                         println!("{:?}", value);
-                        self.current_frame().push_arc(value.clone());
-                        self.current_frame().push_arc(value);
+                        self.current_frame().push_ref(value.clone());
+                        self.current_frame().push_ref(value);
                     }
                     IRETURN | FRETURN | DRETURN => {
                         println!("RETURN");
@@ -317,7 +321,7 @@ impl Vm {
                         let that_borrow = that.borrow();
                         let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
                         println!("get static field {}", name);
-                        self.current_frame().push_arc(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
+                        self.current_frame().push_ref(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
                     }
                     PUTSTATIC => {
                         println!("PUTSTATIC");
@@ -369,7 +373,7 @@ impl Vm {
                         if let Value::Ref(instance) = &mut *objectref.get() {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 let value = object.get(class_name, field_name);
-                                self.current_frame().push_arc(Arc::clone(value));
+                                self.current_frame().push_ref(Arc::clone(value));
                             } else {
                                 unreachable!()
                             }
@@ -419,7 +423,7 @@ impl Vm {
                             match *return_value.get() {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_arc(return_value.clone());
+                                    self.current_frame().push_ref(return_value.clone());
                                 }
                             }
                             println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
@@ -445,7 +449,7 @@ impl Vm {
                             match *returnvalue.get() {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_arc(returnvalue.clone());
+                                    self.current_frame().push_ref(returnvalue.clone());
                                 }
                             }
                         } else {
@@ -460,9 +464,9 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let class_to_instantiate = get_class(self, Some(&borrow.name), class_name)?;
 
-                        let object = Arc::new(UnsafeCell::new(ObjectRef::Object(Box::new(
+                        let object = unsafe_ref(ObjectRef::Object(Box::new(
                             Vm::new_instance(class_to_instantiate),
-                        ))));
+                        )));
                         self.current_frame().push(Value::Ref(Arc::clone(&object)));
                         self.heap.new_object(object);
                     }
@@ -476,7 +480,7 @@ impl Vm {
                         let count = self.current_frame().pop()?;
                         if let Value::I32(count) = *count.get() { // why does pop()?.get() give weird results?
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
-                            let array = Arc::new(UnsafeCell::new(array));
+                            let array = unsafe_ref(array);
 
                             self.current_frame().push(Value::Ref(Arc::clone(&array)));
                             println!("{}", self.current_frame().len());

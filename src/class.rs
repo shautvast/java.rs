@@ -1,8 +1,7 @@
-use std::cell::{Ref, RefCell, RefMut, UnsafeCell};
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
-use std::os::macos::raw::stat;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -84,7 +83,7 @@ pub struct Class {
     pub access_flags: u16,
     pub name: String,
     pub super_class_name: Option<String>,
-    pub super_class: Option<Arc<RefCell<Class>>>,
+    pub super_class: Option<Type>,
     pub interface_indices: Vec<u16>,
     pub interfaces: Vec<Class>,
     pub fields: HashMap<String, Field>,
@@ -546,7 +545,7 @@ pub enum Value {
     F64(f64),
     BOOL(bool),
     CHAR(char),
-    Ref(Arc<UnsafeCell<ObjectRef>>),
+    Ref(UnsafeRef),
     Utf8(String),
 }
 
@@ -563,6 +562,19 @@ impl Into<UnsafeValue> for Value {
 }
 
 pub type UnsafeValue = Arc<UnsafeCell<Value>>;
+pub type UnsafeRef = Arc<UnsafeCell<ObjectRef>>;
+
+pub fn unsafe_ref(object: ObjectRef) -> UnsafeRef{
+    return Arc::new(UnsafeCell::new(object))
+}
+
+pub fn unsafe_val(val: Value) -> UnsafeValue{
+    return Arc::new(UnsafeCell::new(val))
+}
+
+pub fn type_ref(class: Class) -> Type{
+    return Arc::new(RefCell::new(class))
+}
 pub type Type = Arc<RefCell<Class>>;
 
 unsafe impl Send for Value {}
