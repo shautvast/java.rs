@@ -23,17 +23,9 @@ pub fn get_class(vm: &mut Vm, _calling_class_name: Option<&str>, class_name: &st
     println!("get_class {}", class_name);
 
     unsafe {
-        // not pretty...sorry
-        // if let Some(calling_class_name) = calling_class_name {
-        //     if class_name == calling_class_name { // works around the situation that static initializer needs a ref to the class it's in
-        //         return Ok(CLASSDEFS.get(class_name.into()).unwrap().clone()); // in that case the class is guaranteed to be here
-        //     }
-        // }
-
         let class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
             println!("read class {} ", class_name);
             let resolved_path = find_class(&vm.classpath, class_name).unwrap();
-            // println!("full path {}", resolved_path);
             let bytecode = read_bytecode(resolved_path).unwrap();
             let class = load_class(bytecode).unwrap();
             Arc::new(RefCell::new(class))

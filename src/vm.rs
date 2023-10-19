@@ -121,8 +121,8 @@ impl Vm {
             let mut pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
-                let f= self.current_frame();
-                print!("at {}: stack {}, opcode {}: ", f.at, f.len(), opcode);
+                let f = self.current_frame();
+                print!("at {}: stack {}, #{}: opcode {}: ", f.at, f.len(), *pc-1, opcode);
                 match opcode {
                     ACONST_NULL => {
                         println!("ACONST");
@@ -312,7 +312,8 @@ impl Vm {
                     }
                     BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => unsafe {
                         println!("ASTORE");
-                        self.array_store()? },
+                        self.array_store()?
+                    },
                     POP => {
                         println!("POP");
                         self.current_frame().pop()?;
@@ -322,6 +323,38 @@ impl Vm {
                         let value = self.current_frame().pop()?;
                         self.current_frame().push_ref(value.clone());
                         self.current_frame().push_ref(value);
+                    }
+                    IF_ICMPEQ | IF_ICMPNE | IF_ICMPGT | IF_ICMPGE | IF_ICMPLT | IF_ICMPLE => {
+
+                        let jmp_to = read_u16(&code.opcodes, pc);
+                        let value1 = self.current_frame().pop()?;
+                        let value2 = self.current_frame().pop()?;
+                        unsafe {
+                            if let I32(value1) = *value1.get() {
+                                if let I32(value2) = *value2.get() {
+                                    let jump = match opcode {
+                                        IF_ICMPEQ => { value1 == value2 }
+                                        IF_ICMPNE => { value1 != value2 }
+                                        IF_ICMPGT => { value1 > value2 }
+                                        IF_ICMPGE => { value1 >= value2 }
+                                        IF_ICMPLT => { value1 < value2 }
+                                        IF_ICMPLE => { value1 <= value2 }
+                                        _ => { false }
+                                    };
+                                    if jump {
+                                        println!("JMP {}", jmp_to);
+                                        *pc = jmp_to as usize;
+                                    } else {
+                                        println!("NO JMP {}", jmp_to);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    GOTO => {
+                        let jmp_to = read_u16(&code.opcodes, pc);
+                        println!("GOTO {}", jmp_to);
+                        *pc = jmp_to as usize;
                     }
                     IRETURN | FRETURN | DRETURN => {
                         println!("RETURN");

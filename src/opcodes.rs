@@ -118,6 +118,13 @@ pub const fcmpl: u8 = 149; // (0x95) Compare float (less than)
 pub const fcmpg: u8 = 150; // (0x96) Compare float (greater than)
 pub const dcmpl: u8 = 151; // (0x97) compare double (less than)
 pub const dcmpg: u8 = 152; // (0x98) compare double (greater than)
+pub const IF_ICMPEQ:u8 = 159; // (0x9f) Branch if int comparison succeeds
+pub const IF_ICMPNE:u8 = 160; // (0x9f) Branch if int comparison succeeds
+pub const IF_ICMPLT:u8 = 161; // (0x9f) Branch if int comparison succeeds
+pub const IF_ICMPGE:u8 = 162; // (0x9f) Branch if int comparison succeeds
+pub const IF_ICMPGT:u8 = 163; // (0x9f) Branch if int comparison succeeds
+pub const IF_ICMPLE:u8 = 164; // (0x9f) Branch if int comparison succeeds
+pub const GOTO: u8 = 167; // (0xa7) Branch always
 
 pub const IRETURN: u8 = 172; // (0xac) ireturn
 pub const FRETURN: u8 = 174; // (0xae) Return float from method
