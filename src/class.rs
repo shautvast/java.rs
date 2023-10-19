@@ -1,7 +1,6 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::Hash;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -20,55 +19,49 @@ static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| 
 // gets the Class from cache, or reads it from classpath,
 // then parses the binary data into a Class struct
 // Vm keeps ownership of the class and hands out Arc references to it
-pub fn get_class(vm: &mut Vm, calling_class_name: Option<&str>, class_name: &str) -> Result<Arc<RefCell<Class>>, Error> {
+pub fn get_class(vm: &mut Vm, _calling_class_name: Option<&str>, class_name: &str) -> Result<Arc<RefCell<Class>>, Error> {
     println!("get_class {}", class_name);
 
     unsafe {
         // not pretty...sorry
-        if let Some(calling_class_name) = calling_class_name {
-            if class_name == calling_class_name { // works around the situation that static initializer needs a ref to the class it's in
-                panic!();
-                // return Ok(CLASSDEFS.get(class_name.into()).unwrap().clone()); // in that case the class is guaranteed to be here
-            }
-        }
+        // if let Some(calling_class_name) = calling_class_name {
+        //     if class_name == calling_class_name { // works around the situation that static initializer needs a ref to the class it's in
+        //         return Ok(CLASSDEFS.get(class_name.into()).unwrap().clone()); // in that case the class is guaranteed to be here
+        //     }
+        // }
 
-        let new_class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
+        let class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
             println!("read class {} ", class_name);
             let resolved_path = find_class(&vm.classpath, class_name).unwrap();
             // println!("full path {}", resolved_path);
             let bytecode = read_bytecode(resolved_path).unwrap();
-            let mut class = load_class(bytecode).unwrap();
-            let super_class_name = class.super_class_name.as_ref();
-            if let Some(super_class_name) = super_class_name {
-                if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
-                    class.super_class = Some(super_class);
-                } else {
-                    unreachable!()
+            let class = load_class(bytecode).unwrap();
+            Arc::new(RefCell::new(class))
+        });
+
+        let clone = class.clone();
+        let clone2 = class.clone();
+        if !class.borrow().inited {
+            let super_class_name = class.borrow().super_class_name.as_ref().map(|n| n.to_owned());
+            {
+                if let Some(super_class_name) = super_class_name {
+                    if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
+                        class.borrow_mut().super_class = Some(super_class);
+                    } else {
+                        unreachable!()
+                    }
                 }
             }
 
-            let class = Arc::new(RefCell::new(class));
             Class::initialize_fields(class.clone());
-            class
-        });
+            let clinit = clone.borrow().methods.contains_key("<clinit>()V");
+            if  clinit{
+                vm.execute_class(class.clone(), "<clinit>()V", vec![]).unwrap();
+            }
 
-
-        // calling clinit before the end of this function has been a PITA
-        // 1. infinite recursion
-        // panic after second borrow.
-        // the problem is pretty fundamental: method (clinit) should be called before the class is returned,
-        // but the executing code needs a reference to itself. So get_class is called recursively, but clinit must be called exactly once!
-        // putting the call to clinit in the closure above is way nicer, but the signature change (wrap it in Arc<RefCell>)
-        //update: this is probably not needed anymore because of the check in PUTSTATIC
-
-        //somehow this clone needs to be there before clinit is called, even though the newclass ref remains in scope
-        let clone = new_class.clone();
-
-        if  new_class.clone().borrow().methods.contains_key("<clinit>()V") {
-            vm.execute_class(new_class.clone(), "<clinit>()V", vec![]).unwrap();
+            clone.borrow_mut().inited = true;
         }
-
-        Ok(clone)
+        Ok(clone2)
     }
 }
 
@@ -89,6 +82,7 @@ pub struct Class {
     pub fields: HashMap<String, Field>,
     pub methods: HashMap<String, Rc<Method>>,
     pub attributes: HashMap<String, AttributeType>,
+    pub inited: bool,
     pub(crate) object_field_mapping: HashMap<String, HashMap<String, (String, usize)>>,
     // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
     pub(crate) static_field_mapping: HashMap<String, HashMap<String, (String, usize)>>,
@@ -125,6 +119,7 @@ impl Class {
             fields,
             methods,
             attributes,
+            inited: false,
             object_field_mapping: HashMap::new(),
             static_field_mapping: HashMap::new(),
             static_data: vec![],
@@ -565,17 +560,18 @@ pub type UnsafeValue = Arc<UnsafeCell<Value>>;
 
 pub type UnsafeRef = Arc<UnsafeCell<ObjectRef>>;
 
-pub fn unsafe_ref(object: ObjectRef) -> UnsafeRef{
-    return Arc::new(UnsafeCell::new(object))
+pub fn unsafe_ref(object: ObjectRef) -> UnsafeRef {
+    return Arc::new(UnsafeCell::new(object));
 }
 
-pub fn unsafe_val(val: Value) -> UnsafeValue{
-    return Arc::new(UnsafeCell::new(val))
+pub fn unsafe_val(val: Value) -> UnsafeValue {
+    return Arc::new(UnsafeCell::new(val));
 }
 
-pub fn type_ref(class: Class) -> Type{
-    return Arc::new(RefCell::new(class))
+pub fn type_ref(class: Class) -> Type {
+    return Arc::new(RefCell::new(class));
 }
+
 pub type Type = Arc<RefCell<Class>>;
 
 unsafe impl Send for Value {}

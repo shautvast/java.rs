@@ -321,42 +321,32 @@ impl Vm {
                         let that_borrow = that.borrow();
                         let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
                         println!("get static field {}", name);
-                        self.current_frame().push_ref(borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
+                        self.current_frame().push_ref(that_borrow.static_data.get(*val_index).unwrap().as_ref().unwrap().clone());
                     }
                     PUTSTATIC => {
                         println!("PUTSTATIC");
                         let mut borrow = this_class.borrow_mut();
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let (class_index, field_name_and_type_index) =
-                            borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
-                        let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        let (name) = borrow.cp_utf8(name_index).unwrap();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        println!("field {}", name);
-                        let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
+                        // let (class_index, field_name_and_type_index) =
+                        //     borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
+                        // let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
+                        // let (name) = borrow.cp_utf8(name_index).unwrap();
+                        // let class_name_index = borrow.cp_class_ref(class_index).unwrap();
+                        // println!("field {}", name);
+                        // let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
 
-                        if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
-                            let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
-                            let val_index = *val_index;
-                            let value = self.current_frame().pop()?;
-                            borrow.static_data[val_index] = Some(value);
-                        } else {
-                            let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
-                            let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
-                            let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
-                            let value = self.current_frame().pop()?;
-                            borrow.static_data[*val_index] = Some(value);
-                        }
-                        unsafe {
-                            for v in &borrow.static_data {
-                                let v = &*v.as_ref().unwrap().get();
-                                if let Value::Ref(vv) = v {
-                                    println!("{:?}", &*vv.get())
-                                } else {
-                                    println!("{:?}", *v);
-                                }
-                            }
-                        }
+                        // if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
+                        //     let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
+                        //     let val_index = *val_index;
+                        //     let value = self.current_frame().pop()?;
+                        //     borrow.static_data[val_index] = Some(value);
+                        // } else {
+                        //     let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                        //     let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
+                        //     let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
+                        //     let value = self.current_frame().pop()?;
+                        //     borrow.static_data[*val_index] = Some(value);
+                        // }
                     }
                     GETFIELD => unsafe {
                         let borrow = this_class.borrow();
@@ -414,7 +404,7 @@ impl Vm {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
                             args.insert(0, self.current_frame().pop()?);
-                            let mut return_value = self.execute(
+                            let return_value = self.execute(
                                 Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
@@ -432,6 +422,7 @@ impl Vm {
                         }
                     },
                     INVOKESTATIC => unsafe {
+                        println!("INVOKESTATIC");
                         let cp_index = read_u16(&code.opcodes, pc);
                         if let Some(invocation) =
                             get_signature_for_invoke(&method.constant_pool, cp_index)
@@ -440,7 +431,7 @@ impl Vm {
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
-                            let mut returnvalue = self.execute(
+                            let returnvalue = self.execute(
                                 Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
@@ -680,14 +671,14 @@ unsafe fn copy(value: UnsafeValue) -> UnsafeValue {
     unsafe_val(match (&*value.get()) {
         Void => Void,
         Null => Null,
-        BOOL(b)=> BOOL(*b),
-        CHAR(c)=> CHAR(*c),
-        I32(i)=> I32(*i),
-        I64(l)=> I64(*l),
-        F32(f)=> F32(*f),
-        F64(d)=> F64(*d),
-        Ref(r)=> Ref(r.clone()),
-        Utf8(s)=> Utf8(s.to_owned()),
+        BOOL(b) => BOOL(*b),
+        CHAR(c) => CHAR(*c),
+        I32(i) => I32(*i),
+        I64(l) => I64(*l),
+        F32(f) => F32(*f),
+        F64(d) => F64(*d),
+        Ref(r) => Ref(r.clone()),
+        Utf8(s) => Utf8(s.to_owned()),
     })
 }
 
@@ -719,6 +710,7 @@ fn get_hum_args(signature: &str) -> usize {
             while chars[i] != ';' {
                 i += 1;
             }
+            i += 1;
             num += 1;
         } else if chars[i] == ')' {
             break;
