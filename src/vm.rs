@@ -121,60 +121,76 @@ impl Vm {
             let mut pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
-                println!("stack {} opcode {} ", self.current_frame().len(), opcode);
+                let f= self.current_frame();
+                print!("at {}: stack {}, opcode {}: ", f.at, f.len(), opcode);
                 match opcode {
                     ACONST_NULL => {
+                        println!("ACONST");
                         self.current_frame().push(Value::Null);
                     }
                     ICONST_M1 => {
+                        println!("ICONST");
                         self.current_frame().push(I32(-1));
                     }
                     ICONST_0 => {
-                        println!("ICONST_0");
+                        println!("ICONST");
                         self.current_frame().push(I32(0));
                     }
                     ICONST_1 => {
-                        println!("ICONST_1");
+                        println!("ICONST");
                         self.current_frame().push(I32(1));
                     }
                     ICONST_2 => {
+                        println!("ICONST");
                         self.current_frame().push(I32(2));
                     }
                     ICONST_3 => {
+                        println!("ICONST");
                         self.current_frame().push(I32(3));
                     }
                     ICONST_4 => {
+                        println!("ICONST");
                         self.current_frame().push(I32(4));
                     }
                     ICONST_5 => {
+                        println!("ICONST");
                         self.current_frame().push(I32(5));
                     }
                     LCONST_0 => {
+                        println!("LCONST");
                         self.current_frame().push(Value::I64(0));
                     }
                     LCONST_1 => {
+                        println!("LCONST");
                         self.current_frame().push(Value::I64(1));
                     }
                     FCONST_0 => {
+                        println!("FCONST");
                         self.current_frame().push(Value::F32(0.0));
                     }
                     FCONST_1 => {
+                        println!("FCONST");
                         self.current_frame().push(Value::F32(1.0));
                     }
                     FCONST_2 => {
+                        println!("FCONST");
                         self.current_frame().push(Value::F32(2.0));
                     }
                     DCONST_0 => {
+                        println!("DCONST");
                         self.current_frame().push(Value::F64(0.0));
                     }
                     DCONST_1 => {
+                        println!("DCONST");
                         self.current_frame().push(Value::F64(1.0));
                     }
                     SIPUSH => {
+                        println!("SIPUSH");
                         let s = read_u16(&code.opcodes, pc) as i32;
                         self.current_frame().push(I32(s));
                     }
                     BIPUSH => {
+                        println!("BIPUSH");
                         let c = read_u8(&code.opcodes, pc) as i32;
                         self.current_frame().push(I32(c));
                     }
@@ -243,56 +259,67 @@ impl Vm {
                         }
                     }
                     ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => {
+                        println!("LOAD");
                         // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
                         self.current_frame()
                             .push_ref(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
-                        println!("LOAD");
+                        println!("LOAD_0");
                         self.current_frame()
                             .push_ref(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
+                        println!("LOAD_1");
                         self.current_frame()
                             .push_ref(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
+                        println!("LOAD_2");
                         self.current_frame()
                             .push_ref(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
+                        println!("LOAD_3");
                         self.current_frame()
                             .push_ref(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
+                        println!("ALOAD");
                         self.array_load()?;
                     },
                     ISTORE | LSTORE | FSTORE | DSTORE | ASTORE => {
+                        println!("STORE");
                         let index = read_u8(&code.opcodes, pc) as usize;
                         self.store(&mut local_params, index)?;
                     }
                     ISTORE_0 | LSTORE_0 | DSTORE_0 | ASTORE_0 | FSTORE_0 => {
+                        println!("STORE_0");
                         self.store(&mut local_params, 0)?;
                     }
                     ISTORE_1 | LSTORE_1 | DSTORE_1 | ASTORE_1 | FSTORE_1 => {
-                        println!("STORE");
+                        println!("STORE_1");
                         self.store(&mut local_params, 1)?;
                     }
                     ISTORE_2 | LSTORE_2 | DSTORE_2 | ASTORE_2 | FSTORE_2 => {
+                        println!("STORE_2");
                         self.store(&mut local_params, 2)?;
                     }
                     ISTORE_3 | LSTORE_3 | DSTORE_3 | ASTORE_3 | FSTORE_3 => {
+                        println!("STORE_3");
                         self.store(&mut local_params, 3)?;
                     }
-                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
-                    | AASTORE => unsafe { self.array_store()? },
+                    BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => unsafe {
+                        println!("ASTORE");
+                        self.array_store()? },
                     POP => {
+                        println!("POP");
                         self.current_frame().pop()?;
                     }
                     DUP => {
+                        println!("DUP");
                         let value = self.current_frame().pop()?;
-                        println!("{:?}", value);
                         self.current_frame().push_ref(value.clone());
                         self.current_frame().push_ref(value);
                     }
@@ -308,6 +335,7 @@ impl Vm {
                         return Ok(Value::void());
                     }
                     GETSTATIC => {
+                        println!("GETSTATIC");
                         let borrow = this_class.borrow();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
@@ -327,28 +355,29 @@ impl Vm {
                         println!("PUTSTATIC");
                         let mut borrow = this_class.borrow_mut();
                         let cp_index = read_u16(&code.opcodes, pc);
-                        // let (class_index, field_name_and_type_index) =
-                        //     borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
-                        // let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        // let (name) = borrow.cp_utf8(name_index).unwrap();
-                        // let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        // println!("field {}", name);
-                        // let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
+                        let (class_index, field_name_and_type_index) =
+                            borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
+                        let (name_index, _) = borrow.cp_name_and_type(field_name_and_type_index).unwrap();
+                        let (name) = borrow.cp_utf8(name_index).unwrap();
+                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
+                        println!("field {}", name);
+                        let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
 
-                        // if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
-                        //     let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
-                        //     let val_index = *val_index;
-                        //     let value = self.current_frame().pop()?;
-                        //     borrow.static_data[val_index] = Some(value);
-                        // } else {
-                        //     let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
-                        //     let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
-                        //     let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
-                        //     let value = self.current_frame().pop()?;
-                        //     borrow.static_data[*val_index] = Some(value);
-                        // }
+                        if &borrow.name == that_class_name {// may have to apply this in GETSTATIC too
+                            let (_, val_index) = borrow.static_field_mapping.get(that_class_name).unwrap().get(name).as_ref().unwrap();
+                            let val_index = *val_index;
+                            let value = self.current_frame().pop()?;
+                            borrow.static_data[val_index] = Some(value);
+                        } else {
+                            let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                            let that_borrow = that.borrow(); // if already borrowed, then that_class == this_class
+                            let (_, val_index) = that_borrow.static_field_mapping.get(that_class_name).unwrap().get(name).unwrap();
+                            let value = self.current_frame().pop()?;
+                            borrow.static_data[*val_index] = Some(value);
+                        }
                     }
                     GETFIELD => unsafe {
+                        println!("PUTFIELD");
                         let borrow = this_class.borrow();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
@@ -372,6 +401,7 @@ impl Vm {
                         }
                     },
                     PUTFIELD => unsafe {
+                        println!("PUTFIELD");
                         let borrow = this_class.borrow();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
@@ -483,7 +513,7 @@ impl Vm {
 
                     //TODO implement all opcodes
                     _ => {
-                        panic!("opcode not implemented {:?}", self.stackframes)
+                        panic!("opcode {} not implemented {:?}", opcode, self.stackframes)
                         //TODO implement proper --stacktraces-- error handling
                     }
                 }

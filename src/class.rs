@@ -39,27 +39,34 @@ pub fn get_class(vm: &mut Vm, _calling_class_name: Option<&str>, class_name: &st
             Arc::new(RefCell::new(class))
         });
 
-        let clone = class.clone();
+        // not sure why I have to create the clones first
+        let clone1 = class.clone();
         let clone2 = class.clone();
-        if !class.borrow().inited {
-            let super_class_name = class.borrow().super_class_name.as_ref().map(|n| n.to_owned());
+        let clone3 = class.clone();
+
+        let inited = class.borrow().inited;
+        if !inited {
+            // must not enter here twice!
+            clone1.borrow_mut().inited = true;
+
+            let super_class_name = class.clone().borrow().super_class_name.as_ref().map(|n| n.to_owned());
             {
                 if let Some(super_class_name) = super_class_name {
                     if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
-                        class.borrow_mut().super_class = Some(super_class);
+                        clone1.borrow_mut().super_class = Some(super_class);
                     } else {
                         unreachable!()
                     }
                 }
             }
 
-            Class::initialize_fields(class.clone());
-            let clinit = clone.borrow().methods.contains_key("<clinit>()V");
+            Class::initialize_fields(clone3);
+            let clinit = clone1.borrow().methods.contains_key("<clinit>()V");
             if  clinit{
-                vm.execute_class(class.clone(), "<clinit>()V", vec![]).unwrap();
+                vm.execute_class(clone1, "<clinit>()V", vec![]).unwrap();
             }
+            println!("end clinit");
 
-            clone.borrow_mut().inited = true;
         }
         Ok(clone2)
     }
@@ -243,7 +250,7 @@ impl Class {
                     "D" => Value::F64(0.0),
                     _ => Value::Null,
                 };
-                println!("{} = {:?}", name, value);
+                // println!("{} = {:?}", name, value);
                 field_data[*index] = Some(value.into());
             }
         }
