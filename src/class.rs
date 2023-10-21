@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Error};
 use once_cell::sync::Lazy;
 
-use crate::classloader::{CpEntry, load_class};
+use crate::classloader::{load_class, CpEntry};
 use crate::heap::ObjectRef;
 use crate::io::{find_class, read_bytecode, read_u16};
 use crate::vm::Vm;
@@ -15,37 +15,45 @@ use crate::vm::Vm;
 //trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
 static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
 
-
 // gets the Class from cache, or reads it from classpath,
 // then parses the binary data into a Class struct
 // Vm keeps ownership of the class and hands out Arc references to it
-pub fn get_class(vm: &mut Vm, _calling_class_name: Option<&str>, class_name: &str) -> Result<Arc<RefCell<Class>>, Error> {
-    println!("get_class {}", class_name);
+pub fn get_class(
+    vm: &mut Vm,
+    _calling_class_name: Option<&str>,
+    class_name: &str,
+) -> Result<Arc<RefCell<Class>>, Error> {
+    // println!("get_class {}", class_name);
 
     unsafe {
         let class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
-            println!("read class {} ", class_name);
+            // println!("read class {} ", class_name);
             let resolved_path = find_class(&vm.classpath, class_name).unwrap();
             let bytecode = read_bytecode(resolved_path).unwrap();
             let class = load_class(bytecode).unwrap();
             Arc::new(RefCell::new(class))
         });
 
-        // not sure why I have to create the clones first
-        let clone1 = class.clone();
-        let clone2 = class.clone();
-        let clone3 = class.clone();
-
+        let clone = class.clone();
         let inited = class.borrow().inited;
         if !inited {
-            // must not enter here twice!
-            clone1.borrow_mut().inited = true;
+            // not sure why I have to create the clones first
+            let clone2 = class.clone();
+            let clone3 = class.clone();
 
-            let super_class_name = class.clone().borrow().super_class_name.as_ref().map(|n| n.to_owned());
+            // must not enter here twice!
+            clone2.borrow_mut().inited = true;
+
+            let super_class_name = class
+                .clone()
+                .borrow()
+                .super_class_name
+                .as_ref()
+                .map(|n| n.to_owned());
             {
                 if let Some(super_class_name) = super_class_name {
                     if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
-                        clone1.borrow_mut().super_class = Some(super_class);
+                        clone2.borrow_mut().super_class = Some(super_class);
                     } else {
                         unreachable!()
                     }
@@ -53,17 +61,14 @@ pub fn get_class(vm: &mut Vm, _calling_class_name: Option<&str>, class_name: &st
             }
 
             Class::initialize_fields(clone3);
-            let clinit = clone1.borrow().methods.contains_key("<clinit>()V");
-            if  clinit{
-                vm.execute_class(clone1, "<clinit>()V", vec![]).unwrap();
+            let clinit = clone2.borrow().methods.contains_key("<clinit>()V");
+            if clinit {
+                vm.execute_class(clone2, "<clinit>()V", vec![]).unwrap();
             }
-            println!("end clinit");
-
         }
-        Ok(clone2)
+        Ok(clone)
     }
 }
-
 
 /// the class definition as read from the class file + derived values
 // TODO implement call to static initializers
@@ -126,11 +131,19 @@ impl Class {
     }
 
     pub(crate) fn n_object_fields(&self) -> usize {
-        self.object_field_mapping.iter().map(|(_, v)| v.len()).reduce(|acc, e| acc + e).unwrap()
+        self.object_field_mapping
+            .iter()
+            .map(|(_, v)| v.len())
+            .reduce(|acc, e| acc + e)
+            .unwrap()
     }
 
     pub(crate) fn n_static_fields(&self) -> usize {
-        self.static_field_mapping.iter().map(|(_, v)| v.len()).reduce(|acc, e| acc + e).unwrap()
+        self.static_field_mapping
+            .iter()
+            .map(|(_, v)| v.len())
+            .reduce(|acc, e| acc + e)
+            .unwrap()
     }
 
     // Create a mapping per field(name) to an index in the storage vector that contains the instance data.
@@ -147,7 +160,13 @@ impl Class {
         let mut object_field_map_index: usize = 0;
         let mut static_field_map_index: usize = 0;
 
-        Class::add_field_mappings(&mut this_field_mapping, &mut static_field_mapping, class.clone(), &mut object_field_map_index, &mut static_field_map_index);
+        Class::add_field_mappings(
+            &mut this_field_mapping,
+            &mut static_field_mapping,
+            class.clone(),
+            &mut object_field_map_index,
+            &mut static_field_map_index,
+        );
 
         class.borrow_mut().object_field_mapping = this_field_mapping;
         class.borrow_mut().static_field_mapping = static_field_mapping;
@@ -156,19 +175,31 @@ impl Class {
         class.borrow_mut().static_data = static_data;
     }
 
-    fn add_field_mappings(this_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
-                          static_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
-                          class: Arc<RefCell<Class>>,
-                          object_field_map_index: &mut usize,
-                          static_field_map_index: &mut usize) {
-        let (o, s) = Class::map_fields(class.clone(), object_field_map_index, static_field_map_index);
+    fn add_field_mappings(
+        this_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
+        static_field_mapping: &mut HashMap<String, HashMap<String, (String, usize)>>,
+        class: Arc<RefCell<Class>>,
+        object_field_map_index: &mut usize,
+        static_field_map_index: &mut usize,
+    ) {
+        let (o, s) = Class::map_fields(
+            class.clone(),
+            object_field_map_index,
+            static_field_map_index,
+        );
         let borrow = class.borrow();
         let name = &borrow.name;
         this_field_mapping.insert(name.to_owned(), o);
         static_field_mapping.insert(name.to_owned(), s);
 
         if let Some(super_class) = class.borrow().super_class.as_ref() {
-            Class::add_field_mappings(this_field_mapping, static_field_mapping, super_class.clone(), object_field_map_index, static_field_map_index);
+            Class::add_field_mappings(
+                this_field_mapping,
+                static_field_mapping,
+                super_class.clone(),
+                object_field_map_index,
+                static_field_map_index,
+            );
         }
     }
 
@@ -177,7 +208,10 @@ impl Class {
         class: Arc<RefCell<Class>>,
         object_field_map_index: &mut usize,
         static_field_map_index: &mut usize,
-    ) -> (HashMap<String, (String, usize)>, HashMap<String, (String, usize)>) {
+    ) -> (
+        HashMap<String, (String, usize)>,
+        HashMap<String, (String, usize)>,
+    ) {
         let mut this_fields = HashMap::new(); //fields in class are stored per class and every superclass.
         let mut static_fields = HashMap::new(); //fields in class are stored per class and every superclass.
 
@@ -231,7 +265,7 @@ impl Class {
         let mut field_data = vec![None; class.borrow().n_static_fields()];
 
         for (_, this_class) in &class.borrow().static_field_mapping {
-            for (name, (fieldtype, index)) in this_class {
+            for (_name, (fieldtype, index)) in this_class {
                 let value = match fieldtype.as_str() {
                     "Z" => Value::BOOL(false),
                     "B" => Value::I32(0),
@@ -364,7 +398,7 @@ pub struct Field {
     pub(crate) name_index: u16,
     descriptor_index: u16,
     attributes: HashMap<String, AttributeType>,
-    index: u16,
+    _index: u16,
 }
 
 impl fmt::Debug for Field {
@@ -392,7 +426,7 @@ impl Field {
             name_index,
             descriptor_index,
             attributes,
-            index: field_index,
+            _index: field_index,
         }
     }
 
@@ -416,7 +450,7 @@ impl Field {
     }
 }
 
-const MODIFIERS: [(Modifier, &str); 12] = [
+const _MODIFIERS: [(Modifier, &str); 12] = [
     (Modifier::Public, "public "),
     (Modifier::Private, "private "),
     (Modifier::Protected, "protected "),

@@ -1,3 +1,5 @@
+package testclasses;
+
 public class FloatBean {
 
    private float value;

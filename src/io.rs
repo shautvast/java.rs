@@ -9,10 +9,12 @@ use std::io::Read;
 /// * [jar/zip]#[package_path]/[class].class
 /// * [dir]/[package_path]/[class].class
 pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, Error> {
+    let class_name = &class_name.to_owned().replace(".", "/");
     if class_name.starts_with("java")
         || class_name.starts_with("sun/")
         || class_name.starts_with("com/sun/")
-        || class_name.starts_with("jdk/") {
+        || class_name.starts_with("jdk/")
+    {
         let mut path: String = "jmods/java.base.jmod#classes/".into();
         path.push_str(class_name);
         path.push_str(".class");

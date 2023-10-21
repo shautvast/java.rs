@@ -51,7 +51,7 @@ impl ObjectRef {
     }
 }
 
-impl Debug for ObjectRef{
+impl Debug for ObjectRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ObjectRef::BooleanArray(d) => write!(f, "[Z;{}]", d.len()),
@@ -61,9 +61,9 @@ impl Debug for ObjectRef{
             ObjectRef::FloatArray(d) => write!(f, "[F;{}]", d.len()),
             ObjectRef::IntArray(d) => write!(f, "[I;{}]", d.len()),
             ObjectRef::LongArray(d) => write!(f, "[J;{}]", d.len()),
-            ObjectRef::ObjectArray(t, d) => write!(f,"[L{};{}]", t.borrow().name,d.len()),
-            ObjectRef::ShortArray( d) => write!(f, "[S;{}]", d.len()),
-            ObjectRef::Object( r) => write!(f,"{}{{ {:?} }}", r.class.borrow().name, r.data),
+            ObjectRef::ObjectArray(t, d) => write!(f, "[L{};{}]", t.borrow().name, d.len()),
+            ObjectRef::ShortArray(d) => write!(f, "[S;{}]", d.len()),
+            ObjectRef::Object(r) => write!(f, "{}{{ {:?} }}", r.class.borrow().name, r.data),
         }
     }
 }

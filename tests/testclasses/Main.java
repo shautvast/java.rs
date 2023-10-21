@@ -1,3 +1,5 @@
+package testclasses ;
+
 public class Main {
 
     final static String a;

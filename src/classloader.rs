@@ -273,8 +273,8 @@ fn read_attribute(
             "NestMembers" => Some(("".into(), AttributeType::NestMembers)),         //stub
             "BootstrapMethods" => Some(("".into(), AttributeType::BootstrapMethods)), //stub
             "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),       //stub
-            "Signature" => Some(("".into(), AttributeType::Signature)),       //stub
-            "NestHost" => Some(("".into(), AttributeType::NestHost)),       //stub
+            "Signature" => Some(("".into(), AttributeType::Signature)),             //stub
+            "NestHost" => Some(("".into(), AttributeType::NestHost)),               //stub
             //TODO more actual attribute implementations
             _ => None,
         };

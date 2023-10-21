@@ -7,9 +7,9 @@ fn main() -> Result<(), Error> {
 
     let mut vm = Vm::new("tests");
     // let main_class = "Inheritance";
-    let main_class = "Main";
+    let main_class = "testclasses.Main";
 
-    vm.execute(None,main_class, "main([Ljava/lang/String;)V", vec![])
+    vm.execute(None, main_class, "main([Ljava/lang/String;)V", vec![])
         .unwrap();
     Ok(())
 }
