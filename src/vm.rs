@@ -9,9 +9,7 @@ use log::{info};
 use Value::*;
 
 use crate::class::Value::{Null, Void};
-use crate::class::{
-    get_class, unsafe_ref, unsafe_val, AttributeType, Class, Modifier, UnsafeValue, Value,
-};
+use crate::class::{get_class, unsafe_ref, unsafe_val, AttributeType, Class, Modifier, UnsafeValue, Value, Method};
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
@@ -97,19 +95,20 @@ impl Vm {
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let class = get_class(self, class_name)?;
-        self.execute_class(class, method_name, args)
+        let method = class.clone().borrow().get_method(method_name)?.clone();
+        //TODO implement dynamic dispatch -> get method from instance
+        self.execute_class(class, method, args)
     }
 
     pub fn execute_class(
         &mut self,
         class: Arc<RefCell<Class>>,
-        method_name: &str,
+        method: Rc<Method>,
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let this_class = class;
-        println!("execute {}.{}", this_class.borrow().name, method_name);
+        println!("execute {}.{}", this_class.borrow().name, method.name());
 
-        let method = this_class.clone().borrow().get_method(method_name)?.clone();
         //TODO implement dynamic dispatch -> get method from instance
 
         let mut local_params: Vec<Option<UnsafeValue>> =
@@ -152,25 +151,25 @@ impl Vm {
                         self.current_frame().push(I32(5));
                     }
                     LCONST_0 => {
-                        self.current_frame().push(Value::I64(0));
+                        self.current_frame().push(I64(0));
                     }
                     LCONST_1 => {
-                        self.current_frame().push(Value::I64(1));
+                        self.current_frame().push(I64(1));
                     }
                     FCONST_0 => {
-                        self.current_frame().push(Value::F32(0.0));
+                        self.current_frame().push(F32(0.0));
                     }
                     FCONST_1 => {
-                        self.current_frame().push(Value::F32(1.0));
+                        self.current_frame().push(F32(1.0));
                     }
                     FCONST_2 => {
-                        self.current_frame().push(Value::F32(2.0));
+                        self.current_frame().push(F32(2.0));
                     }
                     DCONST_0 => {
-                        self.current_frame().push(Value::F64(0.0));
+                        self.current_frame().push(F64(0.0));
                     }
                     DCONST_1 => {
-                        self.current_frame().push(Value::F64(1.0));
+                        self.current_frame().push(F64(1.0));
                     }
                     SIPUSH => {
                         let s = read_u16(&code.opcodes, pc) as i32;
@@ -212,8 +211,8 @@ impl Vm {
                                     .as_bytes()
                                     .into();
 
-                                self.execute_class(
-                                    stringclass,
+                                self.execute(
+                                    "java/lang/String",
                                     "<init>([B)V",
                                     vec![
                                         stringinstance.clone(),

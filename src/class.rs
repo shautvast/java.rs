@@ -61,8 +61,9 @@ pub fn get_class(
 
             Class::initialize_fields(clone3);
             let clinit = clone2.borrow().methods.contains_key("<clinit>()V");
+            let name = &clone2.borrow().name.to_owned();
             if clinit {
-                vm.execute_class(clone2, "<clinit>()V", vec![]).unwrap();
+                vm.execute(name, "<clinit>()V", vec![]).unwrap();
             }
         }
         Ok(clone)

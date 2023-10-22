@@ -5,8 +5,7 @@ mod test {
     #[test]
     fn if_cmp() {
         let mut vm = Vm::new("tests");
-        let c = get_class(&mut vm, "testclasses.IfCmp").unwrap();
-        let ret = vm.execute_class(c, "i_is_1()Z", vec![]).unwrap();
+        let ret = vm.execute("testclasses.IfCmp", "i_is_1()Z", vec![]).unwrap();
         unsafe {
             if let Value::I32(b) = *ret.get() {
                 // internally a boolean is an int
@@ -21,9 +20,8 @@ mod test {
     #[test]
     fn consts() {
         let mut vm = Vm::new("tests");
-        let c = get_class(&mut vm, "testclasses.Const").unwrap();
         let ret = vm
-            .execute_class(c, "hello()Ljava/lang/String;", vec![])
+            .execute("testclasses.Const", "hello()Ljava/lang/String;", vec![])
             .unwrap();
         unsafe {
             if let Value::Ref(s) = &*ret.get() {
