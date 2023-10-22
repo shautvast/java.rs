@@ -92,12 +92,11 @@ impl Vm {
     /// contains unsafe, as I think that mimics not-synchronized memory access in the original JVM
     pub fn execute(
         &mut self,
-        calling_class_name: Option<&str>,
         class_name: &str,
         method_name: &str,
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
-        let class = get_class(self, calling_class_name, class_name)?;
+        let class = get_class(self, class_name)?;
         self.execute_class(class, method_name, args)
     }
 
@@ -198,7 +197,6 @@ impl Vm {
                                 //TODO
                                 let stringclass = get_class(
                                     self,
-                                    Some(&this_class.borrow().name),
                                     "java/lang/String",
                                 )
                                     .unwrap();
@@ -357,7 +355,7 @@ impl Vm {
 
                         let that_class_name_index = borrow.cp_class_ref(class_index).unwrap();
                         let that_class_name = borrow.cp_utf8(that_class_name_index).unwrap();
-                        let that = get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                        let that = get_class(self, that_class_name.as_str())?;
                         let that_borrow = that.borrow();
                         let (_, val_index) = that_borrow
                             .static_field_mapping
@@ -397,7 +395,7 @@ impl Vm {
                                 .1
                         } else {
                             let that =
-                                get_class(self, Some(&borrow.name), that_class_name.as_str())?;
+                                get_class(self,  that_class_name.as_str())?;
                             let that_borrow = that.borrow();
                             that_borrow
                                 .static_field_mapping
@@ -466,7 +464,6 @@ impl Vm {
                             }
                             args.insert(0, self.current_frame().pop()?);
                             let return_value = self.execute(
-                                Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
@@ -492,7 +489,6 @@ impl Vm {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
                             let returnvalue = self.execute(
-                                Some(this_class.borrow().name.as_str()),
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
@@ -512,7 +508,7 @@ impl Vm {
                         let borrow = this_class.borrow();
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let class_to_instantiate = get_class(self, Some(&borrow.name), class_name)?;
+                        let class_to_instantiate = get_class(self, class_name)?;
 
                         let object = unsafe_ref(ObjectRef::Object(Box::new(Vm::new_instance(
                             class_to_instantiate,
@@ -525,7 +521,7 @@ impl Vm {
                         let borrow = this_class.borrow();
                         let class_name_index = borrow.cp_class_ref(class_index).unwrap();
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let arraytype = get_class(self, Some(&borrow.name), class_name)?;
+                        let arraytype = get_class(self, class_name)?;
                         let count = self.current_frame().pop()?;
                         if let I32(count) = *count.get() {
                             // why does pop()?.get() give weird results?

@@ -20,7 +20,6 @@ static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| 
 // Vm keeps ownership of the class and hands out Arc references to it
 pub fn get_class(
     vm: &mut Vm,
-    _calling_class_name: Option<&str>,
     class_name: &str,
 ) -> Result<Arc<RefCell<Class>>, Error> {
     // println!("get_class {}", class_name);
@@ -52,7 +51,7 @@ pub fn get_class(
                 .map(|n| n.to_owned());
             {
                 if let Some(super_class_name) = super_class_name {
-                    if let Ok(super_class) = get_class(vm, Some(class_name), &super_class_name) {
+                    if let Ok(super_class) = get_class(vm, &super_class_name) {
                         clone2.borrow_mut().super_class = Some(super_class);
                     } else {
                         unreachable!()

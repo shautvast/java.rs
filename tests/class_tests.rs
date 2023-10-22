@@ -5,7 +5,7 @@ mod test {
     #[test]
     fn if_cmp() {
         let mut vm = Vm::new("tests");
-        let c = get_class(&mut vm, None, "testclasses.IfCmp").unwrap();
+        let c = get_class(&mut vm, "testclasses.IfCmp").unwrap();
         let ret = vm.execute_class(c, "i_is_1()Z", vec![]).unwrap();
         unsafe {
             if let Value::I32(b) = *ret.get() {
@@ -21,7 +21,7 @@ mod test {
     #[test]
     fn consts() {
         let mut vm = Vm::new("tests");
-        let c = get_class(&mut vm, None, "testclasses.Const").unwrap();
+        let c = get_class(&mut vm, "testclasses.Const").unwrap();
         let ret = vm
             .execute_class(c, "hello()Ljava/lang/String;", vec![])
             .unwrap();
