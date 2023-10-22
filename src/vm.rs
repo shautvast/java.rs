@@ -95,8 +95,53 @@ impl Vm {
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let class = get_class(self, class_name)?;
+        // let method = class.clone().borrow().get_method(method_name)?.clone();
+        let classb = class.borrow();
+
+        let method = Self::get_method(&classb, method_name, &args).unwrap();
+        // let mut superclass = class.super_class.as_ref();
+        // while let Some(s) = superclass {
+        //     if let Ok(m) = s.borrow().get_method(method_name) {
+        //         return m;
+        //     }
+        //     superclass = s.borrow().super_class.as_ref();
+        // }
+
+        self.execute_class(class.clone(), method.clone(), args)
+    }
+
+    pub fn execute_special(
+        &mut self,
+        class_name: &str,
+        method_name: &str,
+        args: Vec<UnsafeValue>,
+    ) -> Result<UnsafeValue, Error> {
+        let class = get_class(self, class_name)?;
         let method = class.clone().borrow().get_method(method_name)?.clone();
-        //TODO implement dynamic dispatch -> get method from instance
+        self.execute_class(class.clone(), method.clone(), args)
+    }
+
+    fn get_method<'a>(class: &'a std::cell::Ref<Class>, method_name: &str, args: &Vec<UnsafeValue>) -> Option<&'a Rc<Method>> {
+        unsafe {
+            if let Ref(this) = &*args[0].get() {
+                if let ObjectRef::Object(this) = &*this.get() {
+                    if let Ok(m) = class.get_method(method_name) {
+                        return Some(m);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn execute_static(
+        &mut self,
+        class_name: &str,
+        method_name: &str,
+        args: Vec<UnsafeValue>,
+    ) -> Result<UnsafeValue, Error> {
+        let class = get_class(self, class_name)?;
+        let method = class.clone().borrow().get_method(method_name)?.clone();
         self.execute_class(class, method, args)
     }
 
@@ -211,7 +256,7 @@ impl Vm {
                                     .as_bytes()
                                     .into();
 
-                                self.execute(
+                                self.execute_special(
                                     "java/lang/String",
                                     "<init>([B)V",
                                     vec![
@@ -394,7 +439,7 @@ impl Vm {
                                 .1
                         } else {
                             let that =
-                                get_class(self,  that_class_name.as_str())?;
+                                get_class(self, that_class_name.as_str())?;
                             let that_borrow = that.borrow();
                             that_borrow
                                 .static_field_mapping
@@ -451,7 +496,34 @@ impl Vm {
                             unreachable!()
                         }
                     },
-                    INVOKEVIRTUAL | INVOKESPECIAL => unsafe {
+                    INVOKESPECIAL => unsafe {
+                        // TODO differentiate these opcodes
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let Some(invocation) =
+                            get_signature_for_invoke(&method.constant_pool, cp_index)
+                        {
+                            let mut args = Vec::with_capacity(invocation.method.num_args);
+                            for _ in 0..invocation.method.num_args {
+                                args.insert(0, copy(self.current_frame().pop()?));
+                            }
+                            args.insert(0, self.current_frame().pop()?);
+                            let return_value = self.execute_special(
+                                &invocation.class_name,
+                                &invocation.method.name,
+                                args,
+                            )?;
+                            match *return_value.get() {
+                                Void => {}
+                                _ => {
+                                    self.current_frame().push_ref(return_value.clone());
+                                }
+                            }
+                            // println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                    INVOKEVIRTUAL => unsafe {
                         // TODO differentiate these opcodes
                         let cp_index = read_u16(&code.opcodes, pc);
                         if let Some(invocation) =
@@ -487,7 +559,7 @@ impl Vm {
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
-                            let returnvalue = self.execute(
+                            let returnvalue = self.execute_static(
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,

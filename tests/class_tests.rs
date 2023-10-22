@@ -21,7 +21,7 @@ mod test {
     fn consts() {
         let mut vm = Vm::new("tests");
         let ret = vm
-            .execute("testclasses.Const", "hello()Ljava/lang/String;", vec![])
+            .execute_static("testclasses.Const", "hello()Ljava/lang/String;", vec![])
             .unwrap();
         unsafe {
             if let Value::Ref(s) = &*ret.get() {

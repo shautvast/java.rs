@@ -63,7 +63,7 @@ pub fn get_class(
             let clinit = clone2.borrow().methods.contains_key("<clinit>()V");
             let name = &clone2.borrow().name.to_owned();
             if clinit {
-                vm.execute(name, "<clinit>()V", vec![]).unwrap();
+                vm.execute_special(name, "<clinit>()V", vec![]).unwrap();
             }
         }
         Ok(clone)
