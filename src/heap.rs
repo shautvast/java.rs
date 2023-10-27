@@ -1,10 +1,11 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Formatter, write};
 use std::sync::Arc;
+use ObjectRef::{BooleanArray, CharArray, DoubleArray, FloatArray, LongArray, ShortArray};
 
 use crate::class::{Class, Type, UnsafeValue, Value};
-use crate::heap::ObjectRef::{ByteArray, IntArray, ObjectArray};
+use crate::heap::ObjectRef::{ByteArray, IntArray, ObjectArray, StringArray};
 
 // can contain object or array
 pub enum ObjectRef {
@@ -16,8 +17,10 @@ pub enum ObjectRef {
     DoubleArray(Vec<f64>),
     BooleanArray(Vec<bool>),
     CharArray(Vec<char>),
+    StringArray(Vec<String>),
     ObjectArray(Type, Vec<Arc<UnsafeCell<ObjectRef>>>),
     Object(Box<Object>),
+    Class(Arc<RefCell<Class>>)
 }
 
 fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
@@ -54,16 +57,18 @@ impl ObjectRef {
 impl Debug for ObjectRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            ObjectRef::BooleanArray(d) => write!(f, "[Z;{}]", d.len()),
-            ObjectRef::ByteArray(d) => write!(f, "[B;{}]", d.len()),
-            ObjectRef::CharArray(d) => write!(f, "[C;{}]", d.len()),
-            ObjectRef::DoubleArray(d) => write!(f, "[D;{}]", d.len()),
-            ObjectRef::FloatArray(d) => write!(f, "[F;{}]", d.len()),
-            ObjectRef::IntArray(d) => write!(f, "[I;{}]", d.len()),
-            ObjectRef::LongArray(d) => write!(f, "[J;{}]", d.len()),
-            ObjectRef::ObjectArray(t, d) => write!(f, "[L{};{}]", t.borrow().name, d.len()),
-            ObjectRef::ShortArray(d) => write!(f, "[S;{}]", d.len()),
+            BooleanArray(d) => write!(f, "[Z;{}]", d.len()),
+            ByteArray(d) => write!(f, "[B;{}]", d.len()),
+            CharArray(d) => write!(f, "[C;{}]", d.len()),
+            DoubleArray(d) => write!(f, "[D;{}]", d.len()),
+            FloatArray(d) => write!(f, "[F;{}]", d.len()),
+            IntArray(d) => write!(f, "[I;{}]", d.len()),
+            LongArray(d) => write!(f, "[J;{}]", d.len()),
+            ObjectArray(t, d) => write!(f, "[L{};{}]", t.borrow().name, d.len()),
+            ShortArray(d) => write!(f, "[S;{}]", d.len()),
+            StringArray(d) => write!(f, "[S;{}]", d.len()),
             ObjectRef::Object(r) => write!(f, "{}{{ {:?} }}", r.class.borrow().name, r.data),
+            ObjectRef::Class(s) => write!(f, "Class {:?}", s.borrow().name),
         }
     }
 }

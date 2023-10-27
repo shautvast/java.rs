@@ -12,12 +12,10 @@ pub fn load_class(bytecode: Vec<u8>) -> Result<Class, Error> {
     let major_version = read_u16(&bytecode, pos);
 
     let constant_pool_count = read_u16(&bytecode, pos);
-    // println!("cp count: {}", constant_pool_count);
     let mut constant_pool: HashMap<u16, CpEntry> =
         HashMap::with_capacity(constant_pool_count as usize);
     let mut cp_index = 1;
     while cp_index < constant_pool_count {
-        // println!("cp#{}", cp_index);
         constant_pool.insert(
             cp_index,
             read_constant_pool_entry(&mut cp_index, pos, &bytecode),
@@ -275,6 +273,7 @@ fn read_attribute(
             "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),       //stub
             "Signature" => Some(("".into(), AttributeType::Signature)),             //stub
             "NestHost" => Some(("".into(), AttributeType::NestHost)),               //stub
+            "EnclosingMethod" => Some(("".into(), AttributeType::EnclosingMethod)),               //stub
             //TODO more actual attribute implementations
             _ => None,
         };

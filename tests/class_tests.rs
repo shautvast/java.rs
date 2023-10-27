@@ -1,11 +1,12 @@
 mod test {
-    use java_rs::class::{get_class, Value};
+    use java_rs::class::Value;
     use java_rs::heap::ObjectRef;
     use java_rs::vm::Vm;
+
     #[test]
     fn if_cmp() {
         let mut vm = Vm::new("tests");
-        let ret = vm.execute("testclasses.IfCmp", "i_is_1()Z", vec![]).unwrap();
+        let ret = vm.execute_virtual("testclasses.IfCmp", "i_is_1()Z", vec![]).unwrap();
         unsafe {
             if let Value::I32(b) = *ret.get() {
                 // internally a boolean is an int

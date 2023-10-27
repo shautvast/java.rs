@@ -4,12 +4,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::io::Write;
 use anyhow::{anyhow, Error};
-use log::{info};
+use log::{debug, info};
 
 use Value::*;
 
 use crate::class::Value::{Null, Void};
-use crate::class::{get_class, unsafe_ref, unsafe_val, AttributeType, Class, Modifier, UnsafeValue, Value, Method};
+use crate::class::{get_class, unsafe_ref, unsafe_val, AttributeType, Class, Modifier, UnsafeValue, Value, Method, CLASSES};
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
@@ -39,7 +39,9 @@ impl StackFrame {
     fn push_ref(&mut self, val: UnsafeValue) {
         self.data.push(val);
     }
-
+    fn len(&self) -> usize {
+        self.data.len()
+    }
     fn pop(&mut self) -> Result<UnsafeValue, Error> {
         Ok(self.data.pop().unwrap())
     }
@@ -49,6 +51,16 @@ pub struct Vm {
     pub classpath: Vec<String>,
     heap: Heap,
     pub(crate) stackframes: Vec<StackFrame>,
+}
+
+impl Vm {
+    fn init(vm: &mut Vm) {
+        Self::initialize_class(vm, "java/lang/System");
+    }
+
+    fn initialize_class(vm: &mut Vm, class: &str) {
+        vm.execute_static(class, "initPhase1()V", vec![]).expect("cannot create VM");
+    }
 }
 
 #[cfg(target_family = "unix")]
@@ -72,14 +84,18 @@ impl Vm {
                 writeln!(buf, "{}: {}", record.level(), record.args())
             })
             .init();
-        Self {
+        let mut vm_instance = Self {
             classpath: classpath
                 .split(PATH_SEPARATOR)
                 .map(|s| s.to_owned())
                 .collect(),
             heap: Heap::new(),
             stackframes: vec![],
-        }
+        };
+
+        Vm::init(&mut vm_instance);
+
+        vm_instance
     }
 
     pub fn new_instance(class: Arc<RefCell<Class>>) -> Object {
@@ -88,26 +104,55 @@ impl Vm {
 
     /// execute the bytecode
     /// contains unsafe, as I think that mimics not-synchronized memory access in the original JVM
-    pub fn execute(
+    pub fn execute_virtual(
         &mut self,
         class_name: &str,
         method_name: &str,
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
-        let class = get_class(self, class_name)?;
-        // let method = class.clone().borrow().get_method(method_name)?.clone();
-        let classb = class.borrow();
+        unsafe {
+            for a in &args {
+                let v = &*a.get();
+                if let Ref(r) = v {
+                    info!("arg {:?}",&*r.get());
+                } else {
+                    info!("arg {:?}",&*a.get());
+                }
+            }
 
-        let method = Self::get_method(&classb, method_name, &args).unwrap();
-        // let mut superclass = class.super_class.as_ref();
-        // while let Some(s) = superclass {
-        //     if let Ok(m) = s.borrow().get_method(method_name) {
-        //         return m;
-        //     }
-        //     superclass = s.borrow().super_class.as_ref();
-        // }
 
-        self.execute_class(class.clone(), method.clone(), args)
+            if let Null = &*args[0].get() {
+                panic!("NPE");
+            }
+            if let Ref(this) = &*args[0].get() {
+                if let ObjectRef::Object(this) = &*this.get() {
+                    let class = &this.class;
+                    let borrow = class.borrow();
+                    let method = borrow.get_method(method_name);
+                    if let Some(method) = method {
+                        return self.execute_class(class.clone(), method.clone(), args);
+                    } else {
+                        for s in &borrow.super_classes {
+                            let borrow2 = s.borrow();
+                            let method = borrow2.get_method(method_name);
+                            if let Some(method) = method {
+                                return self.execute_class(class.clone(), method.clone(), args);
+                            } else {
+                                debug!("not {:?}", s);
+                            }
+                        }
+                        debug!("not found {}", method_name);
+                    }
+                } else if let ObjectRef::Class(class) = &*this.get() {
+                    let klazz = get_class(self, "java/lang/Class")?;
+                    let borrow = klazz.borrow();
+                    let method = borrow.get_method(method_name).unwrap();
+                    return self.execute_class(class.clone(), method.clone(), args);
+                }
+            }
+        }
+        println!("this is not an object reference {}", class_name);
+        panic!();
     }
 
     pub fn execute_special(
@@ -117,21 +162,8 @@ impl Vm {
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let class = get_class(self, class_name)?;
-        let method = class.clone().borrow().get_method(method_name)?.clone();
+        let method = class.clone().borrow().get_method(method_name).expect("execute special needs invoked method on the class").clone();
         self.execute_class(class.clone(), method.clone(), args)
-    }
-
-    fn get_method<'a>(class: &'a std::cell::Ref<Class>, method_name: &str, args: &Vec<UnsafeValue>) -> Option<&'a Rc<Method>> {
-        unsafe {
-            if let Ref(this) = &*args[0].get() {
-                if let ObjectRef::Object(this) = &*this.get() {
-                    if let Ok(m) = class.get_method(method_name) {
-                        return Some(m);
-                    }
-                }
-            }
-        }
-        None
     }
 
     pub fn execute_static(
@@ -141,7 +173,7 @@ impl Vm {
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let class = get_class(self, class_name)?;
-        let method = class.clone().borrow().get_method(method_name)?.clone();
+        let method = class.clone().borrow().get_method(method_name).expect("execute static needs this method").clone();
         self.execute_class(class, method, args)
     }
 
@@ -152,14 +184,14 @@ impl Vm {
         args: Vec<UnsafeValue>,
     ) -> Result<UnsafeValue, Error> {
         let this_class = class;
-        println!("execute {}.{}", this_class.borrow().name, method.name());
+        info!("execute {}.{}", this_class.borrow().name, method.name());
 
         //TODO implement dynamic dispatch -> get method from instance
 
         let mut local_params: Vec<Option<UnsafeValue>> =
             args.clone().iter().map(|e| Some(e.clone())).collect();
         if method.is(Modifier::Native) {
-            return Ok(invoke_native(method, args));
+            return Ok(invoke_native(&this_class.borrow().name, &method.name(), args));
         }
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
             let stackframe = StackFrame::new(&this_class.borrow().name, &method.name());
@@ -168,8 +200,8 @@ impl Vm {
             let pc = &mut 0;
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
-                let f = self.current_frame();
-                info!("\t{} #{} {}", &f.at, &*pc - 1, opcodes::OPCODES[opcode as usize]);
+                let cur_frame = self.current_frame();
+                info!("\t{} #{} {} - {}", &cur_frame.at, &*pc - 1, opcodes::OPCODES[opcode as usize], cur_frame.len());
                 match opcode {
                     ACONST_NULL => {
                         self.current_frame().push(Value::Null);
@@ -270,8 +302,14 @@ impl Vm {
                                 self.current_frame().push(Value::I64(*l));
                             }
                             CpEntry::ClassRef(utf8) => {
-                                let string = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
-                                self.current_frame().push(Value::Utf8(string));
+                                let class_name = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
+                                unsafe {
+                                    if let Some(class) = CLASSES.get(&class_name) {
+                                        self.current_frame().push_ref(class.clone());
+                                    } else {
+                                        unreachable!("should not be here");
+                                    }
+                                }
                             }
                             _ => {
                                 panic!("add variant {:?}", c)
@@ -280,14 +318,21 @@ impl Vm {
                     }
                     LDC_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        match method.constant_pool.get(&cp_index).unwrap() {
+                        let cp_entry = method.constant_pool.get(&cp_index).unwrap();
+                        match cp_entry {
                             CpEntry::Integer(i) => {
                                 self.current_frame().push(I32(*i));
                             }
                             CpEntry::Float(f) => {
-                                self.current_frame().push(Value::F32(*f));
+                                self.current_frame().push(F32(*f));
+                            }
+                            CpEntry::StringRef(utf8_index) => {
+                                if let CpEntry::Utf8(s) = method.constant_pool.get(utf8_index).unwrap() {
+                                    self.current_frame().push(Value::Utf8(s.to_owned()));
+                                }
                             }
                             _ => {
+                                println!("{:?}", cp_entry);
                                 unreachable!()
                             }
                         }
@@ -512,6 +557,13 @@ impl Vm {
                                 &invocation.method.name,
                                 args,
                             )?;
+                            if let Ref(r) = &*return_value.get() {
+                                if let ObjectRef::Object(p) = &*r.get() {
+                                    info!("return {:?}", p);
+                                }
+                            } else {
+                                info!("return {:?}", &*return_value.get());
+                            }
                             match *return_value.get() {
                                 Void => {}
                                 _ => {
@@ -534,11 +586,18 @@ impl Vm {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
                             args.insert(0, self.current_frame().pop()?);
-                            let return_value = self.execute(
+                            let return_value = self.execute_virtual(
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
                             )?;
+                            if let Ref(r) = &*return_value.get() {
+                                if let ObjectRef::Object(p) = &*r.get() {
+                                    info!("return {:?}", p);
+                                }
+                            } else {
+                                info!("return {:?}", &*return_value.get());
+                            }
                             match *return_value.get() {
                                 Void => {}
                                 _ => {
@@ -559,15 +618,22 @@ impl Vm {
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, copy(self.current_frame().pop()?));
                             }
-                            let returnvalue = self.execute_static(
+                            let return_value = self.execute_static(
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
                             )?;
-                            match *returnvalue.get() {
+                            if let Ref(r) = &*return_value.get() {
+                                if let ObjectRef::Object(p) = &*r.get() {
+                                    info!("return {:?}", p);
+                                }
+                            } else {
+                                info!("return {:?}", &*return_value.get());
+                            }
+                            match *return_value.get() {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_ref(returnvalue.clone());
+                                    self.current_frame().push_ref(return_value.clone());
                                 }
                             }
                         } else {
@@ -689,16 +755,22 @@ impl Vm {
                         self.current_frame().push(CHAR(array[index]));
                     }
                     ObjectRef::LongArray(array) => {
-                        self.current_frame().push(Value::I64(array[index]));
+                        self.current_frame().push(I64(array[index]));
                     }
                     ObjectRef::FloatArray(array) => {
-                        self.current_frame().push(Value::F32(array[index]));
+                        self.current_frame().push(F32(array[index]));
                     }
                     ObjectRef::DoubleArray(array) => {
-                        self.current_frame().push(Value::F64(array[index]));
+                        self.current_frame().push(F64(array[index]));
                     }
                     ObjectRef::ObjectArray(_arraytype, data) => {
-                        self.current_frame().push(Value::Ref(data[index].clone()));
+                        self.current_frame().push(Ref(data[index].clone()));
+                    }
+                    ObjectRef::StringArray(array) =>{
+                        self.current_frame().push(Utf8(array[index].to_owned()));
+                    }
+                    ObjectRef::Class(_) => {
+                        panic!("should be array")
                     }
                     ObjectRef::Object(_) => {
                         panic!("should be array")
@@ -786,7 +858,14 @@ impl Vm {
                             unreachable!()
                         }
                     }
-                    ObjectRef::Object(_) => {} //throw error?
+                    ObjectRef::StringArray(ref mut array) => {
+                        if let Utf8(ref value) = *value.get() {
+                            array[*index as usize] = value.clone();
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    ObjectRef::Object(_) | ObjectRef::Class(_) => {} //throw error?
                 }
             }
         } else {

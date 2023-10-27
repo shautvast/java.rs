@@ -4,16 +4,19 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
+use log::info;
 use once_cell::sync::Lazy;
 
-use crate::classloader::{load_class, CpEntry};
-use crate::heap::ObjectRef;
+use crate::classloader::{CpEntry, load_class};
+use crate::heap::{ObjectRef};
 use crate::io::{find_class, read_bytecode, read_u16};
 use crate::vm::Vm;
 
 //trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
-static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
+pub static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| HashMap::new());
+//TODO add mutex..
+pub static mut CLASSES: Lazy<HashMap<String, UnsafeValue>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
 
 // gets the Class from cache, or reads it from classpath,
 // then parses the binary data into a Class struct
@@ -22,7 +25,7 @@ pub fn get_class(
     vm: &mut Vm,
     class_name: &str,
 ) -> Result<Arc<RefCell<Class>>, Error> {
-    // println!("get_class {}", class_name);
+    info!("get_class {}", class_name);
 
     unsafe {
         let class = CLASSDEFS.entry(class_name.into()).or_insert_with(|| {
@@ -33,32 +36,49 @@ pub fn get_class(
             Arc::new(RefCell::new(class))
         });
 
+
         let clone = class.clone();
         let inited = class.borrow().inited;
         if !inited {
             // not sure why I have to create the clones first
             let clone2 = class.clone();
             let clone3 = class.clone();
+            let mut some_class = class.clone();
+
+            if class_name != "java/lang/Class" {
+                let klazz = get_class(vm, "java/lang/Class")?;
+                let mut class_instance = Vm::new_instance(klazz);
+                class_instance.set(&"java/lang/Class".to_owned(), &"name".to_owned(), unsafe_val(Value::Utf8(class_name.into())));
+                CLASSES.insert(class_name.into(), unsafe_val(Value::Ref(unsafe_ref(ObjectRef::Object(Box::new(class_instance))))));
+            }
 
             // must not enter here twice!
             clone2.borrow_mut().inited = true;
 
-            let super_class_name = class
-                .clone()
-                .borrow()
-                .super_class_name
-                .as_ref()
-                .map(|n| n.to_owned());
-            {
-                if let Some(super_class_name) = super_class_name {
-                    if let Ok(super_class) = get_class(vm, &super_class_name) {
-                        clone2.borrow_mut().super_class = Some(super_class);
-                    } else {
-                        unreachable!()
+            let mut supers = vec![];
+            if class_name != "java/lang/Class" {
+                loop {
+                    let super_class_name = some_class
+                        .clone()
+                        .borrow()
+                        .super_class_name
+                        .as_ref()
+                        .map(|n| n.to_owned());
+                    {
+                        if let Some(super_class_name) = super_class_name {
+                            if let Ok(super_class) = get_class(vm, &super_class_name) {
+                                supers.push(super_class.clone());
+                                some_class = super_class.clone();
+                                clone2.borrow_mut().super_class = Some(super_class);
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
-
             Class::initialize_fields(clone3);
             let clinit = clone2.borrow().methods.contains_key("<clinit>()V");
             let name = &clone2.borrow().name.to_owned();
@@ -81,6 +101,7 @@ pub struct Class {
     pub name: String,
     pub super_class_name: Option<String>,
     pub super_class: Option<Type>,
+    pub super_classes: Vec<Type>,
     pub interface_indices: Vec<u16>,
     pub interfaces: Vec<Class>,
     pub fields: HashMap<String, Field>,
@@ -118,6 +139,7 @@ impl Class {
             name,
             super_class_name,
             super_class: None, // has to be instantiated later, because it involves classloading. maybe not store it here
+            super_classes: vec![],
             interface_indices,
             interfaces: vec![], // same
             fields,
@@ -237,10 +259,8 @@ impl Class {
         (self.major_version, self.minor_version)
     }
 
-    pub fn get_method(&self, name: &str) -> Result<&Rc<Method>, Error> {
-        self.methods
-            .get(name)
-            .ok_or(anyhow!("Method {} not found", name))
+    pub fn get_method(&self, name: &str) -> Option<&Rc<Method>> {
+        self.methods.get(name)
     }
 
     fn class_name(
