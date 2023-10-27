@@ -2,6 +2,7 @@
 
 use log::info;
 use once_cell::sync::Lazy;
+use whoami::platform;
 
 use crate::class::{unsafe_ref, unsafe_val, UnsafeValue, Value};
 use crate::class::Value::Void;
@@ -40,50 +41,87 @@ fn cmdProps() -> Value {
 fn systemProps() -> Value {
     unsafe {
         let props: Lazy<Vec<String>> = Lazy::new(|| {
-            let mut vec = Vec::new();
-            //TODO set values
-            vec.push("display_country");
-            vec.push("display_language");
-            vec.push("display_script");
-            vec.push("display_variant");
-            vec.push("file_encoding");
-            vec.push("file_separator");
-            vec.push("format_country");
-            vec.push("format_language");
-            vec.push("format_script");
-            vec.push("format_variant");
-            vec.push("ftp_nonProxyHosts");
-            vec.push("ftp_proxyHost");
-            vec.push("ftp_proxyPort");
-            vec.push("http_nonProxyHosts");
-            vec.push("http_proxyHost");
-            vec.push("http_proxyPort");
-            vec.push("https_proxyHost");
-            vec.push("https_proxyPort");
-            vec.push("java_io_tmpdir");
-            vec.push("line_separator");
-            vec.push("os_arch");
-            vec.push("os_name");
-            vec.push("os_version");
-            vec.push("path_separator");
-            vec.push("socksNonProxyHosts");
-            vec.push("socksProxyHost");
-            vec.push("socksProxyPort");
-            vec.push("stderr_encoding");
-            vec.push("stdout_encoding");
-            vec.push("sun_arch_abi");
-            vec.push("sun_arch_data_model");
-            vec.push("sun_cpu_endian");
-            vec.push("sun_cpu_isalist");
-            vec.push("sun_io_unicode_encoding");
-            vec.push("sun_jnu_encoding");
-            vec.push("sun_os_patch_level");
-            vec.push("user_dir");
-            vec.push("user_home");
-            vec.push("user_name");
-            vec.push("FIXED_LENGTH");
+            let mut vec: Vec<String> = Vec::new();
+            //TODO set correct values
+            vec.push("display_country".into()); //null in jdk21
+            vec.push("display_language".into()); //null in jdk21
+            vec.push("display_script".into()); //null in jdk21
+            vec.push("display_variant".into()); //null in jdk21
+            vec.push("UTF-8".into());
 
-            vec.into_iter().map(|s| s.to_owned()).collect()
+            {
+                #[cfg(target_family = "unix")]
+                vec.push("/".into());
+                #[cfg(target_family = "windows")]
+                vec.push("\\");
+            }
+            vec.push("format_country".into()); //null in jdk21
+            vec.push("format_language".into()); //null in jdk21
+            vec.push("format_script".into()); //null in jdk21
+            vec.push("format_variant".into()); //null in jdk21
+            vec.push("ftp_nonProxyHosts".into());
+            if let Ok(ftp_proxy) = std::env::var("ftp_proxy") {
+                vec.push(ftp_proxy.to_owned());//TODO
+                vec.push(ftp_proxy);
+            } else {
+                vec.push("".to_owned());
+                vec.push("".to_owned());
+            }
+
+            vec.push("http_nonProxyHosts".into());
+            if let Ok(http_proxy) = std::env::var("http_proxy") {
+                vec.push(http_proxy.to_owned());
+                vec.push(http_proxy);//TODO
+            } else {
+                vec.push("".to_owned());
+                vec.push("".to_owned());
+            }
+            if let Ok(https_proxy) = std::env::var("https_proxy") {
+                vec.push(https_proxy.to_owned());
+                vec.push(https_proxy);
+            }else {
+                vec.push("".to_owned());
+                vec.push("".to_owned());
+            }
+            vec.push(std::env::temp_dir().display().to_string());
+
+            {
+                #[cfg(target_family = "unix")]
+                vec.push("\n".into());
+                #[cfg(target_family = "windows")]
+                vec.push("\r\n");
+            }
+            vec.push(whoami::platform().to_string());
+            vec.push(whoami::devicename());
+            vec.push("os_version".into());
+            {
+                #[cfg(target_family = "unix")]
+                vec.push(":".into());
+                #[cfg(target_family = "windows")]
+                vec.push(";".into());
+            }
+            vec.push("socksNonProxyHosts".into());
+            vec.push("socksProxyHost".into());
+            vec.push("socksProxyPort".into());
+            vec.push("UTF-8".into());
+            vec.push("UTF-8".into());
+            vec.push("sun_arch_abi".into());
+            vec.push("sun_arch_data_model".into());
+            vec.push("sun_cpu_endian".into()); //null in jdk21
+            vec.push("sun_cpu_isalist".into()); //null in jdk21
+            vec.push("sun_io_unicode_encoding".into()); //null in jdk21
+            vec.push("sun_jnu_encoding".into()); //null in jdk21
+            vec.push("sun_os_patch_level".into()); //null in jdk21
+            if let Ok(curdir) = std::env::current_dir() {
+                vec.push(curdir.display().to_string());
+            }
+
+            let home = std::env::home_dir().unwrap();
+            vec.push(home.display().to_string());
+            vec.push(whoami::username());
+            vec.push("FIXED_LENGTH".into());
+
+            vec
         });
         Value::Ref(unsafe_ref(ObjectRef::StringArray(props.to_vec())))
     }
