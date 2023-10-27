@@ -671,6 +671,15 @@ impl Vm {
                             panic!();
                         }
                     },
+                    ARRAYLENGTH => {
+                        let val = self.current_frame().pop()?;
+                        unsafe {
+                            if let Ref(val) = &*val.get() {
+                                let o = &*val.get();
+                                self.current_frame().push(I32(o.get_array_length() as i32));
+                            }
+                        }
+                    }
                     MONITORENTER => {
                         self.current_frame().pop()?;
                     } //TODO implement
@@ -734,10 +743,10 @@ impl Vm {
         if let I32(index) = &*value.get() {
             let index = *index as usize;
             let arrayref = self.current_frame().pop()?;
-            if let Value::Null = &*arrayref.get() {
+            if let Null = &*arrayref.get() {
                 return Err(anyhow!("NullpointerException"));
             }
-            if let Value::Ref(objectref) = &*arrayref.get() {
+            if let Ref(objectref) = &*arrayref.get() {
                 match &*objectref.get() {
                     ObjectRef::ByteArray(array) => {
                         self.current_frame().push(I32(array[index] as i32));
@@ -766,7 +775,7 @@ impl Vm {
                     ObjectRef::ObjectArray(_arraytype, data) => {
                         self.current_frame().push(Ref(data[index].clone()));
                     }
-                    ObjectRef::StringArray(array) =>{
+                    ObjectRef::StringArray(array) => {
                         self.current_frame().push(Utf8(array[index].to_owned()));
                     }
                     ObjectRef::Class(_) => {

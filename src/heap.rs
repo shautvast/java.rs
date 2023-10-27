@@ -20,7 +20,25 @@ pub enum ObjectRef {
     StringArray(Vec<String>),
     ObjectArray(Type, Vec<Arc<UnsafeCell<ObjectRef>>>),
     Object(Box<Object>),
-    Class(Arc<RefCell<Class>>)
+    Class(Arc<RefCell<Class>>),
+}
+
+impl ObjectRef {
+    pub fn get_array_length(&self) -> usize {
+        match self {
+            ByteArray(d) => d.len(),
+            ShortArray(d) => d.len(),
+            IntArray(d) => d.len(),
+            LongArray(d) => d.len(),
+            FloatArray(d) => d.len(),
+            DoubleArray(d) => d.len(),
+            BooleanArray(d) => d.len(),
+            CharArray(d) => d.len(),
+            StringArray(d) => d.len(),
+            ObjectArray(_, d) => d.len(),
+            _ => unreachable!("not an array")
+        }
+    }
 }
 
 fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {

@@ -286,7 +286,7 @@ pub const NEW: u8 = 187;
 // (0xbb) Create new object
 pub const ANEWARRAY: u8 = 189;
 // (0xbd)
-pub const _ARRAYLENGTH: u8 = 190;
+pub const ARRAYLENGTH: u8 = 190;
 // (0xbe)
 pub const _ATHROW: u8 = 191;
 // (0xbf)
@@ -440,7 +440,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[INVOKESTATIC  as usize] = "INVOKESTATIC" ;
     opcodes[NEW  as usize] = "NEW" ;
     opcodes[ANEWARRAY  as usize] = "ANEWARRAY" ;
-    opcodes[_ARRAYLENGTH  as usize] = "_ARRAYLENGTH" ;
+    opcodes[ARRAYLENGTH  as usize] = "ARRAYLENGTH" ;
     opcodes[_ATHROW  as usize] = "_ATHROW" ;
     opcodes[_CHECKCAST  as usize] = "_CHECKCAST" ;
     opcodes[MONITORENTER  as usize] = "MONITORENTER" ;
