@@ -199,7 +199,7 @@ pub const _DSUB: u8 = 103;
 pub const _FMUL: u8 = 106;
 // (0x6a) Multiply float
 pub const _DMUL: u8 = 107; // (0x6b) Multiply double
-
+pub const IDIV:u8 = 108;
 pub const _FDIV: u8 = 110;
 // (0x6e) Divide float
 pub const _DDIV: u8 = 111;

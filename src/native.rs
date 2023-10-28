@@ -2,20 +2,19 @@
 
 use log::info;
 use once_cell::sync::Lazy;
-use whoami::platform;
 
-use crate::class::{unsafe_ref, unsafe_val, UnsafeValue, Value};
+use crate::class::{unsafe_ref, Value};
 use crate::class::Value::Void;
 use crate::heap::ObjectRef;
 
-pub fn invoke_native(class_name: &String, method_name: &String, _args: Vec<UnsafeValue>) -> UnsafeValue {
+pub fn invoke_native(class_name: &String, method_name: &String, _args: Vec<Value>) -> Value {
     info!("native {}.{}", class_name, method_name);
 
-    unsafe_val(match class_name.as_str() {
+    match class_name.as_str() {
         "java/lang/Class" => java_lang_class(method_name),
         "jdk/internal/util/SystemProps$Raw" => jdk_internal_util_SystemProps_Raw(method_name),
         _ => Void
-    })
+    }
 }
 
 fn java_lang_class(method_name: &String) -> Value {

@@ -16,7 +16,7 @@ use crate::vm::Vm;
 //trying to be ready for multithreaded as much as possible, using Arc's and all, but it will still require (a lot of) extra work
 pub static mut CLASSDEFS: Lazy<HashMap<String, Arc<RefCell<Class>>>> = Lazy::new(|| HashMap::new());
 //TODO add mutex..
-pub static mut CLASSES: Lazy<HashMap<String, UnsafeValue>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
+pub static mut CLASSES: Lazy<HashMap<String, Value>> = Lazy::new(|| HashMap::new()); //TODO add mutex..
 
 // gets the Class from cache, or reads it from classpath,
 // then parses the binary data into a Class struct
@@ -48,8 +48,8 @@ pub fn get_class(
             if class_name != "java/lang/Class" {
                 let klazz = get_class(vm, "java/lang/Class")?;
                 let mut class_instance = Vm::new_instance(klazz);
-                class_instance.set(&"java/lang/Class".to_owned(), &"name".to_owned(), unsafe_val(Value::Utf8(class_name.into())));
-                CLASSES.insert(class_name.into(), unsafe_val(Value::Ref(unsafe_ref(ObjectRef::Object(Box::new(class_instance))))));
+                class_instance.set(&"java/lang/Class".to_owned(), &"name".to_owned(), Value::Utf8(class_name.into()));
+                CLASSES.insert(class_name.into(), Value::Ref(unsafe_ref(ObjectRef::Object(Box::new(class_instance)))));
             }
 
             // must not enter here twice!
@@ -112,7 +112,7 @@ pub struct Class {
     // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
     pub(crate) static_field_mapping: HashMap<String, HashMap<String, (String, usize)>>,
     // first key: this/super/supersuper-name(etc), second key: fieldname, value (type, index)
-    pub(crate) static_data: Vec<Option<UnsafeValue>>,
+    pub(crate) static_data: Vec<Option<Value>>,
 }
 
 impl Class {
@@ -281,7 +281,7 @@ impl Class {
         }
     }
 
-    pub(crate) fn set_field_data(class: Arc<RefCell<Class>>) -> Vec<Option<UnsafeValue>> {
+    pub(crate) fn set_field_data(class: Arc<RefCell<Class>>) -> Vec<Option<Value>> {
         let mut field_data = vec![None; class.borrow().n_static_fields()];
 
         for (_, this_class) in &class.borrow().static_field_mapping {
@@ -581,7 +581,7 @@ impl MethodCode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Void,
     // variant returned for void methods
@@ -597,29 +597,15 @@ pub enum Value {
     Utf8(String),
 }
 
-impl Value {
-    pub fn void() -> UnsafeValue {
-        Arc::new(UnsafeCell::new(Value::Void))
-    }
-}
-
-impl Into<UnsafeValue> for Value {
-    fn into(self) -> UnsafeValue {
-        Arc::new(UnsafeCell::new(self))
-    }
-}
-
-pub type UnsafeValue = Arc<UnsafeCell<Value>>;
-
 pub type UnsafeRef = Arc<UnsafeCell<ObjectRef>>;
 
 pub fn unsafe_ref(object: ObjectRef) -> UnsafeRef {
     return Arc::new(UnsafeCell::new(object));
 }
 
-pub fn unsafe_val(val: Value) -> UnsafeValue {
-    return Arc::new(UnsafeCell::new(val));
-}
+// pub fn unsafe_val(val: Value) -> UnsafeValue {
+//     return Arc::new(UnsafeCell::new(val));
+// }
 
 pub fn type_ref(class: Class) -> Type {
     return Arc::new(RefCell::new(class));

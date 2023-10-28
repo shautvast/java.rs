@@ -9,7 +9,7 @@ use log::{debug, info};
 use Value::*;
 
 use crate::class::Value::{Null, Void};
-use crate::class::{get_class, unsafe_ref, unsafe_val, AttributeType, Class, Modifier, UnsafeValue, Value, Method, CLASSES};
+use crate::class::{get_class, unsafe_ref, AttributeType, Class, Modifier, Value, Method, CLASSES};
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
@@ -20,7 +20,7 @@ use crate::opcodes::*;
 #[derive(Debug)]
 pub(crate) struct StackFrame {
     at: String,
-    data: Vec<UnsafeValue>,
+    data: Vec<Value>,
 }
 
 // maybe just call frame
@@ -33,16 +33,13 @@ impl StackFrame {
     }
 
     fn push(&mut self, val: Value) {
-        self.data.push(unsafe_val(val));
-    }
-
-    fn push_ref(&mut self, val: UnsafeValue) {
         self.data.push(val);
     }
+
     fn len(&self) -> usize {
         self.data.len()
     }
-    fn pop(&mut self) -> Result<UnsafeValue, Error> {
+    fn pop(&mut self) -> Result<Value, Error> {
         Ok(self.data.pop().unwrap())
     }
 }
@@ -108,23 +105,22 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<UnsafeValue>,
-    ) -> Result<UnsafeValue, Error> {
+        args: Vec<Value>,
+    ) -> Result<Value, Error> {
         unsafe {
-            for a in &args {
-                let v = &*a.get();
-                if let Ref(r) = v {
+            for arg in &args {
+                if let Ref(r) = arg {
                     info!("arg {:?}",&*r.get());
                 } else {
-                    info!("arg {:?}",&*a.get());
+                    info!("arg {:?}",arg);
                 }
             }
 
 
-            if let Null = &*args[0].get() {
+            if let Null = args[0] {
                 panic!("NPE");
             }
-            if let Ref(this) = &*args[0].get() {
+            if let Ref(this) = &args[0] {
                 if let ObjectRef::Object(this) = &*this.get() {
                     let class = &this.class;
                     let borrow = class.borrow();
@@ -159,8 +155,8 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<UnsafeValue>,
-    ) -> Result<UnsafeValue, Error> {
+        args: Vec<Value>,
+    ) -> Result<Value, Error> {
         let class = get_class(self, class_name)?;
         let method = class.clone().borrow().get_method(method_name).expect("execute special needs invoked method on the class").clone();
         self.execute_class(class.clone(), method.clone(), args)
@@ -170,8 +166,8 @@ impl Vm {
         &mut self,
         class_name: &str,
         method_name: &str,
-        args: Vec<UnsafeValue>,
-    ) -> Result<UnsafeValue, Error> {
+        args: Vec<Value>,
+    ) -> Result<Value, Error> {
         let class = get_class(self, class_name)?;
         let method = class.clone().borrow().get_method(method_name).expect("execute static needs this method").clone();
         self.execute_class(class, method, args)
@@ -181,14 +177,14 @@ impl Vm {
         &mut self,
         class: Arc<RefCell<Class>>,
         method: Rc<Method>,
-        args: Vec<UnsafeValue>,
-    ) -> Result<UnsafeValue, Error> {
+        args: Vec<Value>,
+    ) -> Result<Value, Error> {
         let this_class = class;
         info!("execute {}.{}", this_class.borrow().name, method.name());
 
         //TODO implement dynamic dispatch -> get method from instance
 
-        let mut local_params: Vec<Option<UnsafeValue>> =
+        let mut local_params: Vec<Option<Value>> =
             args.clone().iter().map(|e| Some(e.clone())).collect();
         if method.is(Modifier::Native) {
             return Ok(invoke_native(&this_class.borrow().name, &method.name(), args));
@@ -277,9 +273,9 @@ impl Vm {
                                 )
                                     .unwrap();
                                 let stringinstance =
-                                    unsafe_val(Value::Ref(unsafe_ref(ObjectRef::Object(
+                                    Ref(unsafe_ref(ObjectRef::Object(
                                         Box::new(Vm::new_instance(stringclass.clone())),
-                                    ))));
+                                    )));
                                 let string: Vec<u8> = this_class
                                     .borrow()
                                     .cp_utf8(utf8)
@@ -293,10 +289,10 @@ impl Vm {
                                     "<init>([B)V",
                                     vec![
                                         stringinstance.clone(),
-                                        unsafe_val(Value::Ref(ObjectRef::new_byte_array(string))),
+                                        Ref(ObjectRef::new_byte_array(string)),
                                     ],
                                 )?;
-                                self.current_frame().push_ref(stringinstance);
+                                self.current_frame().push(stringinstance);
                             }
                             CpEntry::Long(l) => {
                                 self.current_frame().push(Value::I64(*l));
@@ -305,7 +301,7 @@ impl Vm {
                                 let class_name = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
                                 unsafe {
                                     if let Some(class) = CLASSES.get(&class_name) {
-                                        self.current_frame().push_ref(class.clone());
+                                        self.current_frame().push(class.clone());
                                     } else {
                                         unreachable!("should not be here");
                                     }
@@ -355,23 +351,23 @@ impl Vm {
                         // omitting the type checks so far
                         let n = read_u8(&code.opcodes, pc) as usize;
                         self.current_frame()
-                            .push_ref(local_params[n].as_ref().unwrap().clone());
+                            .push(local_params[n].as_ref().unwrap().clone());
                     }
                     ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
                         self.current_frame()
-                            .push_ref(local_params[0].as_ref().unwrap().clone());
+                            .push(local_params[0].as_ref().unwrap().clone());
                     }
                     ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
                         self.current_frame()
-                            .push_ref(local_params[1].as_ref().unwrap().clone());
+                            .push(local_params[1].as_ref().unwrap().clone());
                     }
                     ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
                         self.current_frame()
-                            .push_ref(local_params[2].as_ref().unwrap().clone());
+                            .push(local_params[2].as_ref().unwrap().clone());
                     }
                     ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
                         self.current_frame()
-                            .push_ref(local_params[3].as_ref().unwrap().clone());
+                            .push(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
                         self.array_load()?;
@@ -401,14 +397,14 @@ impl Vm {
                     }
                     DUP => {
                         let value = self.current_frame().pop()?;
-                        self.current_frame().push_ref(value.clone());
-                        self.current_frame().push_ref(value);
+                        self.current_frame().push(value.clone());
+                        self.current_frame().push(value);
                     }
                     IFEQ | IFNE | IFLT | IFGE | IFGT | IFLE => {
                         let jmp_to = read_u16(&code.opcodes, pc) - 3; // -3 so that offset = location of Cmp opcode
                         let value = self.current_frame().pop()?;
                         unsafe {
-                            Self::if_cmp(pc, opcode, jmp_to, &*value.get(), &I32(0));
+                            Self::if_cmp(pc, opcode, jmp_to, &value, &I32(0));
                         }
                     }
 
@@ -417,7 +413,7 @@ impl Vm {
                         let value1 = self.current_frame().pop()?;
                         let value2 = self.current_frame().pop()?;
                         unsafe {
-                            Self::if_cmp(pc, opcode, jmp_to, &*value1.get(), &*value2.get());
+                            Self::if_cmp(pc, opcode, jmp_to, &value1, &value2);
                         }
                     }
                     GOTO => {
@@ -431,7 +427,7 @@ impl Vm {
                     }
                     RETURN_VOID => {
                         self.stackframes.pop();
-                        return Ok(Value::void());
+                        return Ok(Void);
                     }
                     GETSTATIC => {
                         let borrow = this_class.borrow();
@@ -452,7 +448,7 @@ impl Vm {
                             .unwrap()
                             .get(name)
                             .unwrap();
-                        self.current_frame().push_ref(
+                        self.current_frame().push(
                             that_borrow
                                 .static_data
                                 .get(*val_index)
@@ -509,10 +505,10 @@ impl Vm {
                         let field_name = borrow.cp_utf8(field_name_index).unwrap();
 
                         let objectref = self.current_frame().pop()?;
-                        if let Value::Ref(instance) = &mut *objectref.get() {
+                        if let Ref(instance) = objectref {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 let value = object.get(class_name, field_name);
-                                self.current_frame().push_ref(Arc::clone(value));
+                                self.current_frame().push(value.clone());
                             } else {
                                 unreachable!()
                             }
@@ -533,7 +529,7 @@ impl Vm {
 
                         let value = self.current_frame().pop()?;
                         let objectref = self.current_frame().pop()?;
-                        if let Value::Ref(instance) = &mut *objectref.get() {
+                        if let Ref(instance) = objectref {
                             if let ObjectRef::Object(ref mut object) = &mut *instance.get() {
                                 object.set(class_name, field_name, value);
                             }
@@ -549,7 +545,7 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, copy(self.current_frame().pop()?));
+                                args.insert(0, self.current_frame().pop()?.clone());
                             }
                             args.insert(0, self.current_frame().pop()?);
                             let return_value = self.execute_special(
@@ -557,17 +553,17 @@ impl Vm {
                                 &invocation.method.name,
                                 args,
                             )?;
-                            if let Ref(r) = &*return_value.get() {
+                            if let Ref(r) = &return_value {
                                 if let ObjectRef::Object(p) = &*r.get() {
                                     info!("return {:?}", p);
                                 }
                             } else {
-                                info!("return {:?}", &*return_value.get());
+                                info!("return {:?}", return_value);
                             }
-                            match *return_value.get() {
+                            match return_value {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_ref(return_value.clone());
+                                    self.current_frame().push(return_value.clone());
                                 }
                             }
                             // println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
@@ -583,7 +579,7 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, copy(self.current_frame().pop()?));
+                                args.insert(0, self.current_frame().pop()?.clone());
                             }
                             args.insert(0, self.current_frame().pop()?);
                             let return_value = self.execute_virtual(
@@ -591,17 +587,17 @@ impl Vm {
                                 &invocation.method.name,
                                 args,
                             )?;
-                            if let Ref(r) = &*return_value.get() {
+                            if let Ref(r) = &return_value {
                                 if let ObjectRef::Object(p) = &*r.get() {
                                     info!("return {:?}", p);
                                 }
                             } else {
-                                info!("return {:?}", &*return_value.get());
+                                info!("return {:?}", return_value);
                             }
-                            match *return_value.get() {
+                            match return_value {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_ref(return_value.clone());
+                                    self.current_frame().push(return_value.clone());
                                 }
                             }
                             // println!("stack {} at {}", self.current_frame().len(), self.current_frame().at)
@@ -616,24 +612,24 @@ impl Vm {
                         {
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
-                                args.insert(0, copy(self.current_frame().pop()?));
+                                args.insert(0, self.current_frame().pop()?.clone());
                             }
                             let return_value = self.execute_static(
                                 &invocation.class_name,
                                 &invocation.method.name,
                                 args,
                             )?;
-                            if let Ref(r) = &*return_value.get() {
+                            if let Ref(r) = &return_value {
                                 if let ObjectRef::Object(p) = &*r.get() {
                                     info!("return {:?}", p);
                                 }
                             } else {
-                                info!("return {:?}", &*return_value.get());
+                                info!("return {:?}", return_value);
                             }
-                            match *return_value.get() {
+                            match return_value {
                                 Void => {}
                                 _ => {
-                                    self.current_frame().push_ref(return_value.clone());
+                                    self.current_frame().push(return_value.clone());
                                 }
                             }
                         } else {
@@ -660,7 +656,7 @@ impl Vm {
                         let class_name = borrow.cp_utf8(class_name_index).unwrap();
                         let arraytype = get_class(self, class_name)?;
                         let count = self.current_frame().pop()?;
-                        if let I32(count) = *count.get() {
+                        if let I32(count) = count {
                             // why does pop()?.get() give weird results?
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
                             let array = unsafe_ref(array);
@@ -674,7 +670,7 @@ impl Vm {
                     ARRAYLENGTH => {
                         let val = self.current_frame().pop()?;
                         unsafe {
-                            if let Ref(val) = &*val.get() {
+                            if let Ref(val) = val {
                                 let o = &*val.get();
                                 self.current_frame().push(I32(o.get_array_length() as i32));
                             }
@@ -686,7 +682,7 @@ impl Vm {
                     IFNULL | IFNONNULL => unsafe {
                         let jmp_to = read_u16(&code.opcodes, pc) - 3;
                         let value = self.current_frame().pop()?;
-                        let its_null = if let Null = *value.get() { true } else { false };
+                        let its_null = if let Null = value { true } else { false };
 
                         if its_null && opcode == IFNULL {
                             info!("\t\tIF NULL =>{}: JMP {}", its_null, *pc + jmp_to as usize);
@@ -740,13 +736,13 @@ impl Vm {
     unsafe fn array_load(&mut self) -> Result<(), Error> {
         let value = self.current_frame().pop()?;
 
-        if let I32(index) = &*value.get() {
+        if let I32(index) = &value {
             let index = *index as usize;
             let arrayref = self.current_frame().pop()?;
-            if let Null = &*arrayref.get() {
+            if let Null = arrayref {
                 return Err(anyhow!("NullpointerException"));
             }
-            if let Ref(objectref) = &*arrayref.get() {
+            if let Ref(objectref) = arrayref {
                 match &*objectref.get() {
                     ObjectRef::ByteArray(array) => {
                         self.current_frame().push(I32(array[index] as i32));
@@ -792,84 +788,84 @@ impl Vm {
 
     unsafe fn array_store(&mut self) -> Result<(), Error> {
         let value = self.current_frame().pop()?;
-        let index = &*self.current_frame().pop()?;
+        let index = self.current_frame().pop()?;
         let arrayref = &mut self.current_frame().pop()?;
 
-        if let Value::Null = &*arrayref.get() {
+        if let Value::Null = &*arrayref {
             return Err(anyhow!("NullpointerException"));
         }
 
-        if let I32(index) = &*index.get() {
-            if let Value::Ref(ref mut objectref) = &mut *arrayref.get() {
+        if let I32(index) = index {
+            if let Ref(ref mut objectref) = arrayref {
                 match &mut *objectref.get() {
                     ObjectRef::ByteArray(ref mut array) => {
-                        if let I32(value) = *value.get() {
+                        if let I32(value) = value {
                             // is i32 correct?
-                            array[*index as usize] = value as i8;
+                            array[index as usize] = value as i8;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::ShortArray(ref mut array) => {
-                        if let I32(value) = *value.get() {
+                        if let I32(value) = value {
                             // is i32 correct?
-                            array[*index as usize] = value as i16;
+                            array[index as usize] = value as i16;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::IntArray(ref mut array) => {
-                        if let I32(value) = *value.get() {
-                            array[*index as usize] = value;
+                        if let I32(value) = value{
+                            array[index as usize] = value;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::BooleanArray(ref mut array) => {
-                        if let I32(value) = *value.get() {
-                            array[*index as usize] = value > 0;
+                        if let I32(value) = value {
+                            array[index as usize] = value > 0;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::CharArray(ref mut array) => {
-                        if let I32(value) = *value.get() {
-                            array[*index as usize] = char::from_u32_unchecked(value as u32);
+                        if let I32(value) = value {
+                            array[index as usize] = char::from_u32_unchecked(value as u32);
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::LongArray(ref mut array) => {
-                        if let Value::I64(value) = *value.get() {
-                            array[*index as usize] = value;
+                        if let I64(value) = value {
+                            array[index as usize] = value;
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::FloatArray(ref mut array) => {
-                        if let Value::F32(value) = *value.get() {
-                            array[*index as usize] = value
+                        if let F32(value) = value {
+                            array[index as usize] = value
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::DoubleArray(ref mut array) => {
-                        if let Value::F64(value) = *value.get() {
-                            array[*index as usize] = value
+                        if let F64(value) = value {
+                            array[index as usize] = value
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::ObjectArray(_arraytype, ref mut array) => {
-                        if let Ref(ref value) = *value.get() {
-                            array[*index as usize] = value.clone();
+                        if let Ref(ref value) = value {
+                            array[index as usize] = value.clone();
                         } else {
                             unreachable!()
                         }
                     }
                     ObjectRef::StringArray(ref mut array) => {
-                        if let Utf8(ref value) = *value.get() {
-                            array[*index as usize] = value.clone();
+                        if let Utf8(ref value) = value {
+                            array[index as usize] = value.clone();
                         } else {
                             unreachable!()
                         }
@@ -885,7 +881,7 @@ impl Vm {
 
     fn store(
         &mut self,
-        local_params: &mut Vec<Option<UnsafeValue>>,
+        local_params: &mut Vec<Option<Value>>,
         index: usize,
     ) -> Result<(), Error> {
         let value = self.current_frame().pop()?;
@@ -926,20 +922,20 @@ fn get_signature_for_invoke(cp: &Rc<HashMap<u16, CpEntry>>, index: u16) -> Optio
     None
 }
 
-unsafe fn copy(value: UnsafeValue) -> UnsafeValue {
-    unsafe_val(match &*value.get() {
-        Void => Void,
-        Null => Null,
-        BOOL(b) => BOOL(*b),
-        CHAR(c) => CHAR(*c),
-        I32(i) => I32(*i),
-        I64(l) => I64(*l),
-        F32(f) => F32(*f),
-        F64(d) => F64(*d),
-        Ref(r) => Ref(r.clone()),
-        Utf8(s) => Utf8(s.to_owned()),
-    })
-}
+// unsafe fn copy(value: Value) -> Value {
+//     match value {
+//         Void => Void,
+//         Null => Null,
+//         BOOL(b) => BOOL(b),
+//         CHAR(c) => CHAR(c),
+//         I32(i) => I32(i),
+//         I64(l) => I64(l),
+//         F32(f) => F32(f),
+//         F64(d) => F64(d),
+//         Ref(r) => Ref(r.clone()),
+//         Utf8(s) => Utf8(s.to_owned()),
+//     }
+// }
 
 fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<MethodSignature> {
     if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {

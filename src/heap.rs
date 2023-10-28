@@ -1,10 +1,10 @@
 use std::cell::{RefCell, UnsafeCell};
 use std::fmt;
-use std::fmt::{Debug, Formatter, write};
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use ObjectRef::{BooleanArray, CharArray, DoubleArray, FloatArray, LongArray, ShortArray};
 
-use crate::class::{Class, Type, UnsafeValue, Value};
+use crate::class::{Class, Type, Value};
 use crate::heap::ObjectRef::{ByteArray, IntArray, ObjectArray, StringArray};
 
 // can contain object or array
@@ -19,7 +19,7 @@ pub enum ObjectRef {
     CharArray(Vec<char>),
     StringArray(Vec<String>),
     ObjectArray(Type, Vec<Arc<UnsafeCell<ObjectRef>>>),
-    Object(Box<Object>),
+    Object(Box<Object>),//Box necessary??
     Class(Arc<RefCell<Class>>),
 }
 
@@ -42,11 +42,6 @@ impl ObjectRef {
 }
 
 fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
-    // ideally we'd use Vec::into_raw_parts, but it's unstable,
-    // so we have to do it manually:
-
-    // first, make sure v's destructor doesn't free the data
-    // it thinks it owns when it goes out of scope
     let mut v = std::mem::ManuallyDrop::new(v);
 
     // then, pick apart the existing Vec
@@ -96,7 +91,7 @@ pub struct Object {
     // locked: bool,
     // hashcode: i32,
     pub class: Arc<RefCell<Class>>,
-    pub data: Vec<UnsafeValue>,
+    pub data: Vec<Value>,
 } //arrays
 
 unsafe impl Send for Object {}
@@ -114,7 +109,7 @@ impl Object {
     }
 
     // initializes all non-static fields to their default values
-    pub(crate) fn init_fields(class: Arc<RefCell<Class>>) -> Vec<UnsafeValue> {
+    pub(crate) fn init_fields(class: Arc<RefCell<Class>>) -> Vec<Value> {
         let mut field_data = Vec::with_capacity(class.borrow().n_object_fields());
 
         for (_, fields) in &class.borrow().object_field_mapping {
@@ -136,7 +131,7 @@ impl Object {
         field_data
     }
 
-    pub fn set(&mut self, class_name: &String, field_name: &String, value: UnsafeValue) {
+    pub fn set(&mut self, class_name: &String, field_name: &String, value: Value) {
         let borrow = self.class.borrow();
         let (_type, index) = borrow
             .object_field_mapping
@@ -147,7 +142,7 @@ impl Object {
         self.data[*index] = value;
     }
 
-    pub fn get(&mut self, class_name: &String, field_name: &String) -> &UnsafeValue {
+    pub fn get(&mut self, class_name: &String, field_name: &String) -> &Value {
         let borrow = self.class.borrow();
         let (_type, index) = borrow
             .object_field_mapping
