@@ -1,0 +1,29 @@
+use anyhow::Error;
+use crate::class::Value;
+
+#[derive(Debug)]
+pub(crate) struct StackFrame {
+    pub(crate) at: String,
+    pub(crate) data: Vec<Value>,
+}
+
+// maybe just call frame
+impl StackFrame {
+    pub(crate) fn new(at_class: &str, at_method: &str) -> Self {
+        let mut at: String = at_class.into();
+        at.push('.');
+        at.push_str(at_method);
+        Self { at, data: vec![] }
+    }
+
+    pub(crate) fn push(&mut self, val: Value) {
+        self.data.push(val);
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.data.len()
+    }
+    pub(crate) fn pop(&mut self) -> Result<Value, Error> {
+        Ok(self.data.pop().unwrap())
+    }
+}

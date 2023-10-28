@@ -1,7 +1,7 @@
 mod test {
     use java_rs::class::Value;
     use java_rs::heap::ObjectRef;
-    use java_rs::vm::Vm;
+    use java_rs::vm1::Vm;
 
     #[test]
     fn if_cmp() {

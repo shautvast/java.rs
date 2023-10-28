@@ -21,7 +21,7 @@ pub static mut CLASSES: Lazy<HashMap<String, Value>> = Lazy::new(|| HashMap::new
 // gets the Class from cache, or reads it from classpath,
 // then parses the binary data into a Class struct
 // Vm keeps ownership of the class and hands out Arc references to it
-pub fn get_class(
+pub(crate) fn get_class(
     vm: &mut Vm,
     class_name: &str,
 ) -> Result<Arc<RefCell<Class>>, Error> {

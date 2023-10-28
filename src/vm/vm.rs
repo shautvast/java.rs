@@ -1,48 +1,25 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::Write;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::io::Write;
+
 use anyhow::{anyhow, Error};
 use log::{debug, info};
 
 use Value::*;
 
+use crate::class::{AttributeType, Class, CLASSES, get_class, Method, Modifier, unsafe_ref, Value};
 use crate::class::Value::{Null, Void};
-use crate::class::{get_class, unsafe_ref, AttributeType, Class, Modifier, Value, Method, CLASSES};
 use crate::classloader::CpEntry;
 use crate::heap::{Heap, Object, ObjectRef};
 use crate::io::*;
 use crate::native::invoke_native;
 use crate::opcodes;
 use crate::opcodes::*;
-
-#[derive(Debug)]
-pub(crate) struct StackFrame {
-    at: String,
-    data: Vec<Value>,
-}
-
-// maybe just call frame
-impl StackFrame {
-    fn new(at_class: &str, at_method: &str) -> Self {
-        let mut at: String = at_class.into();
-        at.push('.');
-        at.push_str(at_method);
-        Self { at, data: vec![] }
-    }
-
-    fn push(&mut self, val: Value) {
-        self.data.push(val);
-    }
-
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-    fn pop(&mut self) -> Result<Value, Error> {
-        Ok(self.data.pop().unwrap())
-    }
-}
+use crate::vm::array::{array_load, array_store};
+use crate::vm::operations::{get_name_and_type, get_signature_for_invoke, get_static};
+use crate::vm::stack::StackFrame;
 
 pub struct Vm {
     pub classpath: Vec<String>,
@@ -324,7 +301,9 @@ impl Vm {
                             }
                             CpEntry::StringRef(utf8_index) => {
                                 if let CpEntry::Utf8(s) = method.constant_pool.get(utf8_index).unwrap() {
-                                    self.current_frame().push(Value::Utf8(s.to_owned()));
+                                    self.current_frame().push(Utf8(s.to_owned()));
+                                } else {
+
                                 }
                             }
                             _ => {
@@ -370,7 +349,9 @@ impl Vm {
                             .push(local_params[3].as_ref().unwrap().clone());
                     }
                     IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => unsafe {
-                        self.array_load()?;
+                        let index = self.current_frame().pop()?;
+                        let arrayref = self.current_frame().pop()?;
+                        self.current_frame().push(array_load(index, arrayref)?);
                     },
                     ISTORE | LSTORE | FSTORE | DSTORE | ASTORE => {
                         let index = read_u8(&code.opcodes, pc) as usize;
@@ -390,7 +371,10 @@ impl Vm {
                     }
                     BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
                     | AASTORE => unsafe {
-                        self.array_store()?
+                        let value = self.current_frame().pop()?;
+                        let index = self.current_frame().pop()?;
+                        let arrayref = &mut self.current_frame().pop()?;
+                        array_store(value, index, arrayref)?
                     },
                     POP => {
                         self.current_frame().pop()?;
@@ -430,33 +414,9 @@ impl Vm {
                         return Ok(Void);
                     }
                     GETSTATIC => {
-                        let borrow = this_class.borrow();
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        let (class_index, field_name_and_type_index) =
-                            borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
-                        let (name_index, _) =
-                            borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        let name = borrow.cp_utf8(name_index).unwrap();
-
-                        let that_class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let that_class_name = borrow.cp_utf8(that_class_name_index).unwrap();
-                        let that = get_class(self, that_class_name.as_str())?;
-                        let that_borrow = that.borrow();
-                        let (_, val_index) = that_borrow
-                            .static_field_mapping
-                            .get(that_class_name)
-                            .unwrap()
-                            .get(name)
-                            .unwrap();
-                        self.current_frame().push(
-                            that_borrow
-                                .static_data
-                                .get(*val_index)
-                                .unwrap()
-                                .as_ref()
-                                .unwrap()
-                                .clone(),
-                        );
+                        let field_index = read_u16(&code.opcodes, pc);
+                        let field_value = get_static(self, this_class.clone(), field_index);
+                        self.current_frame().push(field_value);
                     }
                     PUTSTATIC => {
                         let mut borrow = this_class.borrow_mut();
@@ -733,152 +693,6 @@ impl Vm {
         }
     }
 
-    unsafe fn array_load(&mut self) -> Result<(), Error> {
-        let value = self.current_frame().pop()?;
-
-        if let I32(index) = &value {
-            let index = *index as usize;
-            let arrayref = self.current_frame().pop()?;
-            if let Null = arrayref {
-                return Err(anyhow!("NullpointerException"));
-            }
-            if let Ref(objectref) = arrayref {
-                match &*objectref.get() {
-                    ObjectRef::ByteArray(array) => {
-                        self.current_frame().push(I32(array[index] as i32));
-                    }
-                    ObjectRef::ShortArray(array) => {
-                        self.current_frame().push(I32(array[index] as i32));
-                    }
-                    ObjectRef::IntArray(array) => {
-                        self.current_frame().push(I32(array[index]));
-                    }
-                    ObjectRef::BooleanArray(array) => {
-                        self.current_frame().push(I32(array[index] as i32));
-                    }
-                    ObjectRef::CharArray(array) => {
-                        self.current_frame().push(CHAR(array[index]));
-                    }
-                    ObjectRef::LongArray(array) => {
-                        self.current_frame().push(I64(array[index]));
-                    }
-                    ObjectRef::FloatArray(array) => {
-                        self.current_frame().push(F32(array[index]));
-                    }
-                    ObjectRef::DoubleArray(array) => {
-                        self.current_frame().push(F64(array[index]));
-                    }
-                    ObjectRef::ObjectArray(_arraytype, data) => {
-                        self.current_frame().push(Ref(data[index].clone()));
-                    }
-                    ObjectRef::StringArray(array) => {
-                        self.current_frame().push(Utf8(array[index].to_owned()));
-                    }
-                    ObjectRef::Class(_) => {
-                        panic!("should be array")
-                    }
-                    ObjectRef::Object(_) => {
-                        panic!("should be array")
-                    } //throw error?
-                }
-            }
-        }
-        Ok(())
-    }
-
-    unsafe fn array_store(&mut self) -> Result<(), Error> {
-        let value = self.current_frame().pop()?;
-        let index = self.current_frame().pop()?;
-        let arrayref = &mut self.current_frame().pop()?;
-
-        if let Value::Null = &*arrayref {
-            return Err(anyhow!("NullpointerException"));
-        }
-
-        if let I32(index) = index {
-            if let Ref(ref mut objectref) = arrayref {
-                match &mut *objectref.get() {
-                    ObjectRef::ByteArray(ref mut array) => {
-                        if let I32(value) = value {
-                            // is i32 correct?
-                            array[index as usize] = value as i8;
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::ShortArray(ref mut array) => {
-                        if let I32(value) = value {
-                            // is i32 correct?
-                            array[index as usize] = value as i16;
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::IntArray(ref mut array) => {
-                        if let I32(value) = value{
-                            array[index as usize] = value;
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::BooleanArray(ref mut array) => {
-                        if let I32(value) = value {
-                            array[index as usize] = value > 0;
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::CharArray(ref mut array) => {
-                        if let I32(value) = value {
-                            array[index as usize] = char::from_u32_unchecked(value as u32);
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::LongArray(ref mut array) => {
-                        if let I64(value) = value {
-                            array[index as usize] = value;
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::FloatArray(ref mut array) => {
-                        if let F32(value) = value {
-                            array[index as usize] = value
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::DoubleArray(ref mut array) => {
-                        if let F64(value) = value {
-                            array[index as usize] = value
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::ObjectArray(_arraytype, ref mut array) => {
-                        if let Ref(ref value) = value {
-                            array[index as usize] = value.clone();
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::StringArray(ref mut array) => {
-                        if let Utf8(ref value) = value {
-                            array[index as usize] = value.clone();
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    ObjectRef::Object(_) | ObjectRef::Class(_) => {} //throw error?
-                }
-            }
-        } else {
-            unreachable!()
-        }
-        Ok(())
-    }
-
     fn store(
         &mut self,
         local_params: &mut Vec<Option<Value>>,
@@ -893,86 +707,30 @@ impl Vm {
     }
 }
 
-struct Invocation {
+pub(crate) struct Invocation {
     class_name: String,
     method: MethodSignature,
 }
 
-struct MethodSignature {
+impl Invocation {
+    pub fn new(class_name: String, method: MethodSignature) -> Self{
+        Self{
+            class_name, method
+        }
+    }
+}
+
+pub(crate) struct MethodSignature {
     name: String,
     num_args: usize,
 }
 
-// TODO can be simplified now, using cp_ methods in Class
-fn get_signature_for_invoke(cp: &Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<Invocation> {
-    if let CpEntry::MethodRef(class_index, name_and_type_index)
-    | CpEntry::InterfaceMethodref(class_index, name_and_type_index) = cp.get(&index).unwrap()
-    {
-        if let Some(method_signature) = get_name_and_type(Rc::clone(&cp), *name_and_type_index) {
-            if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
-                if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
-                    return Some(Invocation {
-                        class_name: class_name.into(),
-                        method: method_signature,
-                    });
-                }
-            }
+impl MethodSignature {
+    pub(crate) fn new(name: String, num_args: usize) -> Self {
+        MethodSignature {
+            name,
+            num_args,
         }
     }
-    None
 }
 
-// unsafe fn copy(value: Value) -> Value {
-//     match value {
-//         Void => Void,
-//         Null => Null,
-//         BOOL(b) => BOOL(b),
-//         CHAR(c) => CHAR(c),
-//         I32(i) => I32(i),
-//         I64(l) => I64(l),
-//         F32(f) => F32(f),
-//         F64(d) => F64(d),
-//         Ref(r) => Ref(r.clone()),
-//         Utf8(s) => Utf8(s.to_owned()),
-//     }
-// }
-
-fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<MethodSignature> {
-    if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
-        if let CpEntry::Utf8(method_name) = cp.get(method_name_index).unwrap() {
-            if let CpEntry::Utf8(signature) = cp.get(signature_index).unwrap() {
-                let mut method_signature: String = method_name.into();
-                let num_args = get_hum_args(signature);
-                method_signature.push_str(signature);
-                return Some(MethodSignature {
-                    name: method_signature,
-                    num_args,
-                });
-            }
-        }
-    }
-    None
-}
-
-fn get_hum_args(signature: &str) -> usize {
-    let mut num = 0;
-    let mut i = 1;
-    let chars: Vec<char> = signature.chars().collect();
-
-    while i < chars.len() {
-        if chars[i] == 'L' {
-            i += 1;
-            while chars[i] != ';' {
-                i += 1;
-            }
-            i += 1;
-            num += 1;
-        } else if chars[i] == ')' {
-            break;
-        } else {
-            i += 1;
-            num += 1;
-        }
-    }
-    num
-}
