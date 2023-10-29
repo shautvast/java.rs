@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 use log::{debug, info};
+use once_cell::sync::Lazy;
 
 use Value::*;
 
@@ -18,7 +19,7 @@ use crate::native::invoke_native;
 use crate::opcodes;
 use crate::opcodes::*;
 use crate::vm::array::{array_load, array_store};
-use crate::vm::operations::{get_name_and_type, get_signature_for_invoke, get_static};
+use crate::vm::operations::{get_signature_for_invoke, get_static};
 use crate::vm::stack::StackFrame;
 
 pub struct Vm {
@@ -164,7 +165,7 @@ impl Vm {
         let mut local_params: Vec<Option<Value>> =
             args.clone().iter().map(|e| Some(e.clone())).collect();
         if method.is(Modifier::Native) {
-            return Ok(invoke_native(&this_class.borrow().name, &method.name(), args));
+            return invoke_native(self, &this_class.borrow().name, &method.name(), args);
         }
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
             let stackframe = StackFrame::new(&this_class.borrow().name, &method.name());
@@ -256,7 +257,6 @@ impl Vm {
                                 let string: Vec<u8> = this_class
                                     .borrow()
                                     .cp_utf8(utf8)
-                                    .unwrap()
                                     .to_owned()
                                     .as_bytes()
                                     .into();
@@ -275,7 +275,7 @@ impl Vm {
                                 self.current_frame().push(Value::I64(*l));
                             }
                             CpEntry::ClassRef(utf8) => {
-                                let class_name = this_class.borrow().cp_utf8(utf8).unwrap().to_owned();
+                                let class_name = this_class.borrow().cp_utf8(utf8).to_owned();
                                 unsafe {
                                     if let Some(class) = CLASSES.get(&class_name) {
                                         self.current_frame().push(class.clone());
@@ -302,9 +302,7 @@ impl Vm {
                             CpEntry::StringRef(utf8_index) => {
                                 if let CpEntry::Utf8(s) = method.constant_pool.get(utf8_index).unwrap() {
                                     self.current_frame().push(Utf8(s.to_owned()));
-                                } else {
-
-                                }
+                                } else {}
                             }
                             _ => {
                                 println!("{:?}", cp_entry);
@@ -384,6 +382,12 @@ impl Vm {
                         self.current_frame().push(value.clone());
                         self.current_frame().push(value);
                     }
+                    IDIV => {
+                        let value1 = self.current_frame().pop()?;
+                        let value2 = self.current_frame().pop()?;
+                        self.current_frame().push(I32(value1.into_i32() / value2.into_i32()));
+                    }
+
                     IFEQ | IFNE | IFLT | IFGE | IFGT | IFLE => {
                         let jmp_to = read_u16(&code.opcodes, pc) - 3; // -3 so that offset = location of Cmp opcode
                         let value = self.current_frame().pop()?;
@@ -415,19 +419,19 @@ impl Vm {
                     }
                     GETSTATIC => {
                         let field_index = read_u16(&code.opcodes, pc);
-                        let field_value = get_static(self, this_class.clone(), field_index);
+                        let field_value = get_static(self, this_class.clone(), field_index)?;
                         self.current_frame().push(field_value);
                     }
                     PUTSTATIC => {
                         let mut borrow = this_class.borrow_mut();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
-                            borrow.cp_field_ref(&cp_index).unwrap(); // all these unwraps are safe as long as the class is valid
+                            borrow.cp_field_ref(&cp_index); // all these unwraps are safe as long as the class is valid
                         let (name_index, _) =
-                            borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        let name = borrow.cp_utf8(name_index).unwrap();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let that_class_name = borrow.cp_utf8(class_name_index).unwrap();
+                            borrow.cp_name_and_type(field_name_and_type_index);
+                        let name = borrow.cp_utf8(name_index);
+                        let class_name_index = borrow.cp_class_ref(class_index);
+                        let that_class_name = borrow.cp_utf8(class_name_index);
 
                         let val_index = if &borrow.name == that_class_name {
                             // may have to apply this in GETSTATIC too
@@ -437,7 +441,7 @@ impl Vm {
                                 .unwrap()
                                 .get(name)
                                 .unwrap()
-                                .1
+                                .index
                         } else {
                             let that =
                                 get_class(self, that_class_name.as_str())?;
@@ -448,21 +452,21 @@ impl Vm {
                                 .unwrap()
                                 .get(name)
                                 .unwrap()
-                                .1
+                                .index
                         };
                         let value = self.current_frame().pop()?;
-                        borrow.static_data[val_index] = Some(value);
+                        borrow.static_data[val_index] = value;
                     }
                     GETFIELD => unsafe {
                         let borrow = this_class.borrow();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
-                            borrow.cp_field_ref(&cp_index).unwrap();
+                            borrow.cp_field_ref(&cp_index);
                         let (field_name_index, _) =
-                            borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let field_name = borrow.cp_utf8(field_name_index).unwrap();
+                            borrow.cp_name_and_type(field_name_and_type_index);
+                        let class_name_index = borrow.cp_class_ref(class_index);
+                        let class_name = borrow.cp_utf8(class_name_index);
+                        let field_name = borrow.cp_utf8(field_name_index);
 
                         let objectref = self.current_frame().pop()?;
                         if let Ref(instance) = objectref {
@@ -473,19 +477,19 @@ impl Vm {
                                 unreachable!()
                             }
                         } else {
-                            unreachable!()
+                            unreachable!("objectref {:?}", objectref)
                         }
                     },
                     PUTFIELD => unsafe {
                         let borrow = this_class.borrow();
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
-                            borrow.cp_field_ref(&cp_index).unwrap();
+                            borrow.cp_field_ref(&cp_index);
                         let (field_name_index, _) =
-                            borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
-                        let field_name = borrow.cp_utf8(field_name_index).unwrap();
+                            borrow.cp_name_and_type(field_name_and_type_index);
+                        let class_name_index = borrow.cp_class_ref(class_index);
+                        let class_name = borrow.cp_utf8(class_name_index);
+                        let field_name = borrow.cp_utf8(field_name_index);
 
                         let value = self.current_frame().pop()?;
                         let objectref = self.current_frame().pop()?;
@@ -599,8 +603,8 @@ impl Vm {
                     NEW => {
                         let class_index = &read_u16(&code.opcodes, pc);
                         let borrow = this_class.borrow();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
+                        let class_name_index = borrow.cp_class_ref(class_index);
+                        let class_name = borrow.cp_utf8(class_name_index);
                         let class_to_instantiate = get_class(self, class_name)?;
 
                         let object = unsafe_ref(ObjectRef::Object(Box::new(Vm::new_instance(
@@ -612,8 +616,8 @@ impl Vm {
                     ANEWARRAY => unsafe {
                         let class_index = &read_u16(&code.opcodes, pc);
                         let borrow = this_class.borrow();
-                        let class_name_index = borrow.cp_class_ref(class_index).unwrap();
-                        let class_name = borrow.cp_utf8(class_name_index).unwrap();
+                        let class_name_index = borrow.cp_class_ref(class_index);
+                        let class_name = borrow.cp_utf8(class_name_index);
                         let arraytype = get_class(self, class_name)?;
                         let count = self.current_frame().pop()?;
                         if let I32(count) = count {
@@ -713,9 +717,10 @@ pub(crate) struct Invocation {
 }
 
 impl Invocation {
-    pub fn new(class_name: String, method: MethodSignature) -> Self{
-        Self{
-            class_name, method
+    pub fn new(class_name: String, method: MethodSignature) -> Self {
+        Self {
+            class_name,
+            method,
         }
     }
 }
