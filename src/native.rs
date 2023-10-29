@@ -1,43 +1,52 @@
 #![allow(non_snake_case)]
 
-use log::info;
+use std::ptr::hash;
+use anyhow::Error;
+use log::{debug, info};
 use once_cell::sync::Lazy;
 
-use crate::class::{unsafe_ref, Value};
+use crate::class::{get_class, unsafe_ref, Value};
 use crate::class::Value::Void;
 use crate::heap::ObjectRef;
+use crate::heap::ObjectRef::Object;
+use crate::vm::Vm;
 
-pub fn invoke_native(class_name: &String, method_name: &String, _args: Vec<Value>) -> Value {
+pub fn invoke_native(vm: &mut Vm, class_name: &String, method_name: &String, _args: Vec<Value>) -> Result<Value,Error> {
     info!("native {}.{}", class_name, method_name);
 
     match class_name.as_str() {
-        "java/lang/Class" => java_lang_class(method_name),
-        "jdk/internal/util/SystemProps$Raw" => jdk_internal_util_SystemProps_Raw(method_name),
-        _ => Void
+        "java/lang/Class" => java_lang_class(vm, method_name),
+        "jdk/internal/util/SystemProps$Raw" => jdk_internal_util_SystemProps_Raw(vm, method_name),
+        _ => Ok(Void)
     }
 }
 
-fn java_lang_class(method_name: &String) -> Value {
-    match method_name.as_str() {
+fn java_lang_class(_vm: &mut Vm, method_name: &String) -> Result<Value,Error> {
+    Ok(match method_name.as_str() {
         "desiredAssertionStatus0(Ljava/lang/Class;)Z" => Value::BOOL(false),
         _ => Void
-    }
+    })
 }
 
-fn jdk_internal_util_SystemProps_Raw(method_name: &String) -> Value {
+fn jdk_internal_util_SystemProps_Raw(vm: &mut Vm,method_name: &String) -> Result<Value,Error> {
     match method_name.as_str() {
         "platformProperties()[Ljava/lang/String;" => systemProps(),
-        "cmdProperties()Ljava/util/HashMap;" => cmdProps(), //TODO ability to instantiate classes here
-        "vmProperties()[Ljava/lang/String;" => cmdProps(),
-        _ => Void
+        "cmdProperties()Ljava/util/HashMap;" => cmdProps(vm), //TODO ability to instantiate classes here
+        "vmProperties()[Ljava/lang/String;" => cmdProps(vm),
+        _ => Ok(Void)
     }
 }
 
-fn cmdProps() -> Value {
-    Value::Null
+fn cmdProps(vm: &mut Vm,) -> Result<Value,Error> {
+    let hashmap_class = get_class(vm, "java/util/HashMap")?;
+    let hashmap = Vm::new_instance(hashmap_class);
+    let hashmap = Value::Ref(unsafe_ref(Object(Box::new(hashmap))));
+    vm.execute_special("java/util/HashMap", "<init>()V", vec![hashmap.clone()]);
+    unsafe {debug!("hashmap {:?}", *hashmap.into_object().get());}
+    panic!()
 }
 
-fn systemProps() -> Value {
+fn systemProps() -> Result<Value,Error> {
     unsafe {
         let props: Lazy<Vec<String>> = Lazy::new(|| {
             let mut vec: Vec<String> = Vec::new();
@@ -122,6 +131,6 @@ fn systemProps() -> Value {
 
             vec
         });
-        Value::Ref(unsafe_ref(ObjectRef::StringArray(props.to_vec())))
+        Ok(Value::Ref(unsafe_ref(ObjectRef::StringArray(props.to_vec()))))
     }
 }

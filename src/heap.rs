@@ -113,8 +113,8 @@ impl Object {
         let mut field_data = Vec::with_capacity(class.borrow().n_object_fields());
 
         for (_, fields) in &class.borrow().object_field_mapping {
-            for (_, (fieldtype, _)) in fields {
-                let value = match fieldtype.as_str() {
+            for (_, type_index) in fields {
+                let value = match type_index.type_name.as_str() {
                     "Z" => Value::BOOL(false),
                     "B" => Value::I32(0),
                     "S" => Value::I32(0),
@@ -133,24 +133,24 @@ impl Object {
 
     pub fn set(&mut self, class_name: &String, field_name: &String, value: Value) {
         let borrow = self.class.borrow();
-        let (_type, index) = borrow
+        let type_index = borrow
             .object_field_mapping
             .get(class_name)
             .unwrap()
             .get(field_name)
             .unwrap();
-        self.data[*index] = value;
+        self.data[type_index.index] = value;
     }
 
     pub fn get(&mut self, class_name: &String, field_name: &String) -> &Value {
         let borrow = self.class.borrow();
-        let (_type, index) = borrow
+        let type_index = borrow
             .object_field_mapping
             .get(class_name)
             .unwrap()
             .get(field_name)
             .unwrap();
-        &self.data[*index]
+        &self.data[type_index.index]
     }
 
     // fn get_field_name(&self, cp_index: &u16) -> &str {

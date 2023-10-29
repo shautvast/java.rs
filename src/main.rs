@@ -1,6 +1,8 @@
 use std::io::Error;
 use java_rs::vm::Vm;
 
+
+
 fn main() -> Result<(), Error> {
     // TODO cmdline args
     // TODO build index for package -> jarfile?

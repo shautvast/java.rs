@@ -2,36 +2,37 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use anyhow::{anyhow, Error};
-use Value::I32;
-use crate::class::{Class, get_class, Method, Value};
-use crate::class::Value::{F32, F64, I64, Ref, Utf8};
+use anyhow::Error;
+
+use crate::class::{Class, get_class, Value};
 use crate::classloader::CpEntry;
-use crate::heap::ObjectRef;
 use crate::vm::Vm;
 use crate::vm::vm::{Invocation, MethodSignature};
 
-pub(crate) fn get_static(vm: &mut Vm, this_class: Arc<RefCell<Class>>, field_index: u16) -> Value {
-    let borrow = this_class.borrow();
-    let (class_index, field_name_and_type_index) =
-        borrow.cp_field_ref(&field_index).unwrap(); // all these unwraps are safe as long as the class is valid
-    let (name_index, _) =
-        borrow.cp_name_and_type(field_name_and_type_index).unwrap();
-    let name = borrow.cp_utf8(name_index).unwrap();
+/// the place for opcode implementations that are a bit long
 
-    let that_class_name_index = borrow.cp_class_ref(class_index).unwrap();
-    let that_class_name = borrow.cp_utf8(that_class_name_index).unwrap();
-    let that = get_class(vm, that_class_name.as_str()).unwrap();
-    let that_borrow = that.borrow();
-    let (_, val_index) = that_borrow
+// GET_STATIC opcode
+pub(crate) fn get_static(vm: &mut Vm, this_class: Arc<RefCell<Class>>, field_index: u16) -> Result<Value,Error> {
+    let this_class = this_class.borrow();
+    let (class_index, field_name_and_type_index) =
+        this_class.cp_field_ref(&field_index); // all these unwraps are safe as long as the class is valid
+    let (name_index, _) =
+        this_class.cp_name_and_type(field_name_and_type_index);
+    let field_name = this_class.cp_utf8(name_index);
+
+    let that_class_name_index = this_class.cp_class_ref(class_index);
+    let that_class_name = this_class.cp_utf8(that_class_name_index);
+    let that_class = get_class(vm, that_class_name.as_str())?;
+    let that_class = that_class.borrow();
+
+    let type_index = that_class
         .static_field_mapping
         .get(that_class_name)
-        .unwrap()
-        .get(name)
-        .unwrap();
-    that_borrow
-        .static_data
-        .get(*val_index).unwrap().as_ref().unwrap().clone()
+        .unwrap()// safe because class for static field must be there
+        .get(field_name)
+        .unwrap(); // safe because field must be there
+
+    Ok(that_class.static_data[type_index.index].clone())
 }
 
 pub(crate) fn get_name_and_type(cp: Rc<HashMap<u16, CpEntry>>, index: u16) -> Option<MethodSignature> {

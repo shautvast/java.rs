@@ -397,6 +397,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[_DSUB  as usize] = "_DSUB" ;
     opcodes[_FMUL  as usize] = "_FMUL" ;
     opcodes[_DMUL  as usize] = "_DMUL" ;
+    opcodes[IDIV  as usize] = "IDIV" ;
     opcodes[_FDIV  as usize] = "_FDIV" ;
     opcodes[_DDIV  as usize] = "_DDIV" ;
     opcodes[_FREM  as usize] = "_FREM" ;
