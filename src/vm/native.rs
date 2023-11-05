@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use anyhow::Error;
-use log::{info};
+use log::{debug, info};
 use once_cell::sync::Lazy;
 
 use crate::class::{ObjectRef, Value};
@@ -12,7 +12,7 @@ use crate::vm::stack::StackFrame;
 use crate::vm::Vm;
 
 pub fn invoke_native(vm: &mut Vm, stackframes: &mut Vec<StackFrame>, class_name: &String, method_name: &str, _args: Vec<Value>) -> Result<Value, Error> {
-    info!("native {}.{}", class_name, method_name);
+    debug!("native {}.{}", class_name, method_name);
 
     match class_name.as_str() {
         "java/lang/Class" => java_lang_class(vm, method_name),

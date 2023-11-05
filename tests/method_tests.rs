@@ -1,7 +1,7 @@
 mod test {
-    use java_rs::class::{Method, Modifier};
     use std::collections::HashMap;
     use std::rc::Rc;
+    use java_rs::classloader::classdef::{Method, Modifier};
 
     #[test]
     fn access_flags() {
@@ -16,4 +16,8 @@ mod test {
         assert!(m.is(Modifier::Static));
         assert!(!m.is(Modifier::Private));
     }
+
+
+
+
 }

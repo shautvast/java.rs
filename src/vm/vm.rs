@@ -28,7 +28,6 @@ const PATH_SEPARATOR: char = ';';
 //TODO goto
 //TODO error handling
 impl Vm {
-
     /// for running static initializers
     pub fn new_internal() -> Self {
         Self {}
@@ -48,12 +47,10 @@ impl Vm {
 
     fn init(vm: &mut Vm, stack: &mut Vec<StackFrame>) {
         classmanager::load_class_by_name("java/lang/Class");
-        Self::initialize_class(vm, stack, "java/lang/System");
+        vm.execute_static(stack, "java/lang/System", "initPhase1()V", vec![]).expect("cannot create VM");
+        classmanager::load_class_by_name("java/lang/String");
     }
 
-    fn initialize_class(vm: &mut Vm, stack: &mut Vec<StackFrame>, class: &str) {
-        vm.execute_static(stack, class, "initPhase1()V", vec![]).expect("cannot create VM");
-    }
 
     fn current_frame(stackframes: &mut Vec<StackFrame>) -> &mut StackFrame {
         let i = stackframes.len() - 1;
@@ -74,9 +71,9 @@ impl Vm {
     ) -> Result<Value, Error> {
         for arg in &args {
             if let Ref(r) = arg {
-                info!("arg {:?}",r);
+                debug!("arg {:?}",r);
             } else {
-                info!("arg {:?}",arg);
+                debug!("arg {:?}",arg);
             }
         }
 
@@ -153,7 +150,7 @@ impl Vm {
         method_name: &str,
         args: Vec<Value>,
     ) -> Result<Value, Error> {
-        info!("execute {}.{}", this_class.name, method_name);
+        debug!("execute {}.{}", this_class.name, method_name);
 
         //TODO implement dynamic dispatch -> get method from instance
         let method = classmanager::get_classdef(&this_class.id).get_method(method_name).unwrap();
@@ -170,7 +167,7 @@ impl Vm {
             while *pc < code.opcodes.len() {
                 let opcode = read_u8(&code.opcodes, pc);
                 let cur_frame = Self::current_frame(stackframes);
-                info!("\t{} #{} {} - {}", &cur_frame.at, &*pc - 1, opcodes::OPCODES[opcode as usize], cur_frame.len());
+                debug!("\t{} #{} {} - {}", &cur_frame.at, &*pc - 1, opcodes::OPCODES[opcode as usize], cur_frame.len());
                 match opcode {
                     ACONST_NULL => {
                         Self::current_frame(stackframes).push(Value::Null);
@@ -245,11 +242,9 @@ impl Vm {
                                 let stringinstance =
                                     Ref(ObjectRef::Object(Vm::new_instance(stringclass)));
 
+                                debug!("class id {}", this_class.id);
                                 let string: Vec<u8> =
-                                    classmanager::get_classdef(&this_class.id).cp_utf8(utf8)
-                                        .to_owned()
-                                        .as_bytes()
-                                        .into();
+                                    classmanager::get_classdef(&this_class.id).cp_utf8(utf8).as_bytes().into();
 
                                 self.execute_special(stackframes,
                                                      "java/lang/String",
@@ -493,6 +488,7 @@ impl Vm {
                         if let Some(invocation) =
                             get_signature_for_invoke(&method.constant_pool, cp_index)
                         {
+                            debug!("invoke {:?}", invocation);
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, Self::current_frame(stackframes).pop()?.clone());
@@ -505,10 +501,10 @@ impl Vm {
                             )?;
                             if let Ref(objectref) = &return_value {
                                 if let ObjectRef::Object(object) = objectref {
-                                    info!("return {:?}", object);
+                                    debug!("return {:?}", object);
                                 }
                             } else {
-                                info!("return {:?}", return_value);
+                                debug!("return {:?}", return_value);
                             }
                             match return_value {
                                 Void => {}
@@ -540,10 +536,10 @@ impl Vm {
                             )?;
                             if let Ref(objectref) = &return_value {
                                 if let ObjectRef::Object(object) = objectref {
-                                    info!("return {:?}", object);
+                                    debug!("return {:?}", object);
                                 }
                             } else {
-                                info!("return {:?}", return_value);
+                                debug!("return {:?}", return_value);
                             }
                             match return_value {
                                 Void => {}
@@ -571,10 +567,10 @@ impl Vm {
                             )?;
                             if let Ref(objectref) = &return_value {
                                 if let ObjectRef::Object(object) = objectref {
-                                    info!("return {:?}", object);
+                                    debug!("return {:?}", object);
                                 }
                             } else {
-                                info!("return {:?}", return_value);
+                                debug!("return {:?}", return_value);
                             }
                             match return_value {
                                 Void => {}
@@ -622,7 +618,7 @@ impl Vm {
                             Self::current_frame(stackframes).push(I32(val.get_array_length() as i32));
                         }
                     }
-                    MONITORENTER => {
+                    MONITORENTER | MONITOREXIT => {
                         Self::current_frame(stackframes).pop()?;
                     } //TODO implement
                     IFNULL | IFNONNULL => {
@@ -631,21 +627,21 @@ impl Vm {
                         let its_null = if let Null = value { true } else { false };
 
                         if its_null && opcode == IFNULL {
-                            info!("\t\tIF NULL =>{}: JMP {}", its_null, *pc + jmp_to as usize);
+                            debug!("\t\tIF NULL =>{}: JMP {}", its_null, *pc + jmp_to as usize);
                             *pc += jmp_to as usize;
                         }
                         if !its_null && opcode == IFNONNULL {
-                            info!("\t\tIF NOT NULL =>{}: JMP {}", its_null, *pc + jmp_to as usize);
+                            debug!("\t\tIF NOT NULL =>{}: JMP {}", its_null, *pc + jmp_to as usize);
                             *pc += jmp_to as usize;
                         }
                         //debug info
                         if !its_null && opcode == IFNULL {
-                            info!("\t\tIF NULL =>false: NO JMP");
+                            debug!("\t\tIF NULL =>false: NO JMP");
                         }
                         if its_null && opcode == IFNONNULL {
-                            info!("\t\tIF NONNULL =>false: NO JMP");
+                            debug!("\t\tIF NONNULL =>false: NO JMP");
                         }
-                    },
+                    }
                     //TODO implement all opcodes
                     _ => {
                         panic!("opcode {} not implemented {:?}", opcode, stackframes)
@@ -670,10 +666,10 @@ impl Vm {
                     _ => false,
                 };
                 if jump {
-                    info!("\t\tIF({}) JMP {}", jump, *pc + jmp_to as usize);
+                    debug!("\t\tIF({}) JMP {}", jump, *pc + jmp_to as usize);
                     *pc += jmp_to as usize;
                 } else {
-                    info!("\t\tIF({}) NO JMP", jump);
+                    debug!("\t\tIF({}) NO JMP", jump);
                 }
             }
         }
@@ -696,6 +692,7 @@ impl Vm {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Invocation {
     class_name: String,
     method: MethodSignature,
@@ -710,6 +707,7 @@ impl Invocation {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MethodSignature {
     name: String,
     num_args: usize,

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, LinkedList};
+use log::debug;
 use once_cell::sync::Lazy;
 
 use crate::class::{Class, ClassId, ObjectRef, TypeIndex, Value::*, Value};
@@ -200,8 +201,8 @@ impl ClassManager {
 
         self.names.get(name)
             .and_then(|id|
-                self.classes.insert(*id, Class {
-                    id: *id,
+                self.classes.insert(this_classid, Class {
+                    id: this_classid,
                     initialized: false,
                     name: name.into(),
                     superclass: superclass_id,
@@ -258,6 +259,8 @@ impl ClassManager {
                 classes_to_load.append(&mut self.load_class_and_deps(classname.as_str()).1);
             }
         }
+
+        debug!("new class {} -> {}", name, id);
         id
     }
 

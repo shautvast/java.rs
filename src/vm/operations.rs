@@ -81,10 +81,23 @@ fn get_num_args(signature: &str) -> usize {
             num += 1;
         } else if chars[i] == ')' {
             break;
+        } else if chars[i] == '[' {
+            i += 1;
         } else {
             i += 1;
             num += 1;
         }
     }
     num
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn num_args() {
+        let n = get_num_args("(Ljava/nio/charset/Charset;[BII)V");
+        assert_eq!(n, 4)
+    }
 }

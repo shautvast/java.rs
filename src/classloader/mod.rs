@@ -5,15 +5,16 @@ use std::io::Read;
 use std::rc::Rc;
 
 use anyhow::Error;
+use log::debug;
 
 use crate::classloader::io::{find_class, read_bytes, read_f32, read_f64, read_i32, read_i64, read_u16, read_u32, read_u8};
 use crate::classloader::classdef::{AttributeType, ClassDef, CpEntry, Exception, Field, Method, MethodCode};
 
-pub(crate) mod classdef;
+pub mod classdef;
 pub(crate) mod io;
 
 pub(crate) fn get_classdef(classpath: &Vec<String>, class_name: &str) -> Result<ClassDef,Error> {
-    println!("read class {} ", class_name);
+    debug!("read class {} ", class_name);
     let resolved_path = find_class(classpath, class_name)?;
     let bytecode = read_bytecode(resolved_path)?;
     load_class(bytecode)

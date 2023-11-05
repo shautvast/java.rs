@@ -293,6 +293,7 @@ pub const _ATHROW: u8 = 191;
 pub const _CHECKCAST: u8 = 192;
 // (0xc0)
 pub const MONITORENTER: u8 = 194;
+pub const MONITOREXIT: u8 = 195;
 pub const IFNULL: u8 = 198;
 pub const IFNONNULL: u8 = 199;
 
@@ -445,6 +446,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[_ATHROW  as usize] = "_ATHROW" ;
     opcodes[_CHECKCAST  as usize] = "_CHECKCAST" ;
     opcodes[MONITORENTER  as usize] = "MONITORENTER" ;
+    opcodes[MONITOREXIT  as usize] = "MONITOREXIT" ;
     opcodes[IFNULL  as usize] = "IFNULL" ;
     opcodes[IFNONNULL  as usize] = "IFNONNULL" ;
     opcodes
