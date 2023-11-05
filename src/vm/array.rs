@@ -1,16 +1,17 @@
 use anyhow::{anyhow, Error};
-use crate::class::Value::{self,*};
-use crate::heap::ObjectRef;
 
-pub(crate) unsafe fn array_load(index: Value, arrayref: Value) -> Result<Value, Error> {
-    if let I32(index) = &index {
-        let index = *index as usize;
+use crate::class::ObjectRef;
+use crate::class::Value::{self, *};
+
+pub(crate) fn array_load(index: Value, arrayref: Value) -> Result<Value, Error> {
+    if let I32(index) = index {
+        let index = index as usize;
 
         if let Null = arrayref {
             return Err(anyhow!("NullpointerException"));
         }
         if let Ref(objectref) = arrayref {
-            match &*objectref.get() {
+            match objectref {
                 ObjectRef::ByteArray(array) => {
                     return Ok(I32(array[index] as i32));
                 }
@@ -53,14 +54,14 @@ pub(crate) unsafe fn array_load(index: Value, arrayref: Value) -> Result<Value, 
     panic!()
 }
 
-pub(crate) unsafe fn array_store(value: Value, index: Value, arrayref: &mut Value) -> Result<(), Error> {
-    if let Null = &*arrayref {
+pub(crate) fn array_store(value: Value, index: Value, arrayref: Value) -> Result<(), Error> {
+    if let Null = arrayref {
         return Err(anyhow!("NullpointerException"));
     }
 
     if let I32(index) = index {
-        if let Ref(ref mut objectref) = arrayref {
-            match &mut *objectref.get() {
+        if let Ref(mut objectref) = arrayref {
+            match objectref {
                 ObjectRef::ByteArray(ref mut array) => {
                     if let I32(value) = value {
                         // is i32 correct?
@@ -91,7 +92,7 @@ pub(crate) unsafe fn array_store(value: Value, index: Value, arrayref: &mut Valu
                         unreachable!()
                     }
                 }
-                ObjectRef::CharArray(ref mut array) => {
+                ObjectRef::CharArray(ref mut array) => unsafe{
                     if let I32(value) = value {
                         array[index as usize] = char::from_u32_unchecked(value as u32);
                     } else {

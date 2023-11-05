@@ -1,8 +1,5 @@
+mod classloader;
+pub mod classmanager;
 pub mod class;
-pub mod classloader;
-pub mod heap;
-pub mod io;
-pub mod opcodes;
 pub mod vm;
-
-pub mod native;
+pub mod heap;

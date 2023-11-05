@@ -1,8 +1,10 @@
 use anyhow::Error;
+use log::debug;
+
 use crate::class::Value;
 
 #[derive(Debug)]
-pub(crate) struct StackFrame {
+pub struct StackFrame {
     pub(crate) at: String,
     pub(crate) data: Vec<Value>,
 }
@@ -17,12 +19,14 @@ impl StackFrame {
     }
 
     pub(crate) fn push(&mut self, val: Value) {
+        debug!("push {:?}", val);
         self.data.push(val);
     }
 
     pub(crate) fn len(&self) -> usize {
         self.data.len()
     }
+
     pub(crate) fn pop(&mut self) -> Result<Value, Error> {
         Ok(self.data.pop().unwrap())
     }
