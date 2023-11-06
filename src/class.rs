@@ -114,7 +114,7 @@ impl ObjectRef {
             CharArray(d) => d.len(),
             StringArray(d) => d.len(),
             ObjectArray(_, d) => d.len(),
-            _ => unreachable!("not an array")
+            _ => unreachable!("not an array {:?}", self)
         }
     }
 }

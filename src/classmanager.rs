@@ -116,7 +116,7 @@ impl ClassManager {
             class_objects: HashMap::new(),
             names: HashMap::new(),
             classpath: vec![],
-            vm:Vm::new_internal(),
+            vm: Vm::new_internal(),
         }
     }
 
@@ -146,6 +146,7 @@ impl ClassManager {
     }
 
     fn get_classdef(&self, id: &ClassId) -> &ClassDef {
+        debug!("get_classdef {}", *id);
         self.classdefs.get(&id).unwrap()
     }
 
@@ -155,7 +156,10 @@ impl ClassManager {
             Some(id) => if self.classes.get(id).is_none() {
                 self.add_class(name);
             }
-            None => { self.add_class(name); }
+            None => {
+
+                self.add_class(name);
+            }
         }
     }
 
@@ -165,6 +169,7 @@ impl ClassManager {
     }
 
     fn add_class(&mut self, name: &str) -> ClassId {
+        debug!("add class {}", name);
         let this_classid = self.load(name);
         let this_classdef = self.classdefs.get(&this_classid).unwrap();
 
@@ -199,19 +204,18 @@ impl ClassManager {
 
         self.static_class_data.insert(this_classid, Self::set_field_data(&static_field_mapping));
 
-        self.names.get(name)
-            .and_then(|id|
-                self.classes.insert(this_classid, Class {
-                    id: this_classid,
-                    initialized: false,
-                    name: name.into(),
-                    superclass: superclass_id,
-                    parents,
-                    interfaces: interface_ids,
-                    object_field_mapping,
-                    static_field_mapping,
-                    // static_field_data: static_values,
-                }));
+        self.classes.insert(this_classid, Class {
+            id: this_classid,
+            initialized: false,
+            name: name.into(),
+            superclass: superclass_id,
+            parents,
+            interfaces: interface_ids,
+            object_field_mapping,
+            static_field_mapping,
+            // static_field_data: static_values,
+        });
+
         if name != "java/lang/Class" {
             let cls = self.get_class_by_name("java/lang/Class").unwrap();
             let mut instance = Object::new(cls);
@@ -223,7 +227,7 @@ impl ClassManager {
         let clinit = this_classdef.methods.contains_key("<clinit>()V");
 
         if clinit {
-            self.vm.execute_special(&mut vec![],name, "<clinit>()V", vec![]).unwrap();
+            self.vm.execute_special(&mut vec![], name, "<clinit>()V", vec![]).unwrap();
         }
 
         this_classid
@@ -274,7 +278,7 @@ impl ClassManager {
         let classdef = self.classdefs
             .entry(id)
             .or_insert_with(|| classloader::get_classdef(&self.classpath, name).expect("ClassNotFound"));
-        (self.current_id, inspect_dependencies(classdef))
+        (id, inspect_dependencies(classdef))
     }
 
     pub(crate) fn set_field_data(field_mapping: &HashMap<String, HashMap<String, TypeIndex>>) -> Vec<Value> {

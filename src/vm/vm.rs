@@ -48,7 +48,7 @@ impl Vm {
     fn init(vm: &mut Vm, stack: &mut Vec<StackFrame>) {
         classmanager::load_class_by_name("java/lang/Class");
         vm.execute_static(stack, "java/lang/System", "initPhase1()V", vec![]).expect("cannot create VM");
-        classmanager::load_class_by_name("java/lang/String");
+        // classmanager::load_class_by_name("java/lang/String");
     }
 
 
@@ -85,7 +85,9 @@ impl Vm {
                 let cd = classmanager::get_classdef(&this.class_id);
                 let method = cd.get_method(method_name);
                 if let Some(method) = method {
-                    return self.execute_class_id(stack, this.class_id, &method, args.clone());
+                    classmanager::load_class_by_name(class_name);
+                    let class = classmanager::get_class_by_name(class_name).unwrap();
+                    return self.execute_class(stack, class, method.name().as_str(), args.clone());
                 } else {
                     let name = classmanager::classdef_name(&this.class_id);
                     if let Some(name) = name {
@@ -242,18 +244,18 @@ impl Vm {
                                 let stringinstance =
                                     Ref(ObjectRef::Object(Vm::new_instance(stringclass)));
 
-                                debug!("class id {}", this_class.id);
-                                let string: Vec<u8> =
-                                    classmanager::get_classdef(&this_class.id).cp_utf8(utf8).as_bytes().into();
+                                // let string = classmanager::get_classdef(&this_class.id).cp_utf8(utf8);
+                                debug!("new string \"{}\"", utf8);
+                                // let string: Vec<u8> = string.as_bytes().into();
 
-                                self.execute_special(stackframes,
-                                                     "java/lang/String",
-                                                     "<init>([B)V",
-                                                     vec![
-                                                         stringinstance.clone(),
-                                                         Ref(ObjectRef::new_byte_array(string)),
-                                                     ],
-                                )?;
+                                // self.execute_special(stackframes,
+                                //                      "java/lang/String",
+                                //                      "<init>([B)V",
+                                //                      vec![
+                                //                          stringinstance.clone(),
+                                //                          Ref(ObjectRef::new_byte_array(string)),
+                                //                      ],
+                                // )?;
                                 Self::current_frame(stackframes).push(stringinstance);
                             }
                             CpEntry::Long(l) => {
@@ -369,8 +371,8 @@ impl Vm {
                         Self::current_frame(stackframes).push(value);
                     }
                     IDIV => {
-                        let value1 = Self::current_frame(stackframes).pop()?;
                         let value2 = Self::current_frame(stackframes).pop()?;
+                        let value1 = Self::current_frame(stackframes).pop()?;
                         Self::current_frame(stackframes).push(I32(value1.into_i32() / value2.into_i32()));
                     }
 
@@ -523,6 +525,7 @@ impl Vm {
                         if let Some(invocation) =
                             get_signature_for_invoke(&method.constant_pool, cp_index)
                         {
+                            debug!("invoke {:?}", invocation);
                             let mut args = Vec::with_capacity(invocation.method.num_args);
                             for _ in 0..invocation.method.num_args {
                                 args.insert(0, Self::current_frame(stackframes).pop()?.clone());
