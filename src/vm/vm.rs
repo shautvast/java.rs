@@ -1,11 +1,11 @@
 use std::io::Write;
 
 use anyhow::Error;
-use log::{debug, info};
+use log::debug;
 
-use crate::class::{Class, ClassId, Object, ObjectRef, Value};
+use crate::class::{Class, Object, ObjectRef, Value};
 use crate::class::Value::{F32, F64, I32, I64, Null, Ref, Utf8, Void};
-use crate::classloader::classdef::{AttributeType, CpEntry, Method, Modifier};
+use crate::classloader::classdef::{AttributeType, CpEntry, Modifier};
 use crate::classloader::io::{read_u16, read_u8};
 use crate::classmanager;
 use crate::vm::array::{array_load, array_store};
@@ -137,12 +137,7 @@ impl Vm {
     ) -> Result<Value, Error> {
         classmanager::load_class_by_name(class_name);
         let class = classmanager::get_class_by_name(class_name).unwrap();
-        let _classdef = classmanager::get_classdef(&class.id);
         self.execute_class(stack, class, method_name, args)
-    }
-
-    pub fn execute_class_id(&self, _stack: &mut Vec<StackFrame>, _this_class: ClassId, _method: &Method, _args: Vec<Value>) -> Result<Value, Error> {
-        Ok(Null)
     }
 
     pub fn execute_class(
@@ -369,6 +364,12 @@ impl Vm {
                         let value = Self::current_frame(stackframes).pop()?;
                         Self::current_frame(stackframes).push(value.clone());
                         Self::current_frame(stackframes).push(value);
+                    }
+                    IADD => {
+                        let stack = Self::current_frame(stackframes);
+                        let value2 = stack.pop()?;
+                        let value1 = stack.pop()?;
+                        stack.push(I32(value1.into_i32() + value2.into_i32()));
                     }
                     IDIV => {
                         let value2 = Self::current_frame(stackframes).pop()?;
@@ -597,7 +598,12 @@ impl Vm {
                             class_to_instantiate,
                         ));
                         Self::current_frame(stackframes).push(Ref(object));
-                        // self.heap.new_object(object);
+                    }
+                    NEWARRAY =>{
+                        let arraytype = read_u8(&code.opcodes, pc);
+                        let count = Self::current_frame(stackframes).pop()?;
+                        let array = ObjectRef::new_array(arraytype, count.into_i32() as usize);
+                        Self::current_frame(stackframes).push(Ref(array));
                     }
                     ANEWARRAY => {
                         let classdef = classmanager::get_classdef(&this_class.id);
@@ -609,8 +615,7 @@ impl Vm {
                         let count = Self::current_frame(stackframes).pop()?;
                         if let I32(count) = count {
                             let array = ObjectRef::new_object_array(arraytype, count as usize);
-
-                            Self::current_frame(stackframes).push(Value::Ref(array));
+                            Self::current_frame(stackframes).push(Ref(array));
                         } else {
                             panic!();
                         }

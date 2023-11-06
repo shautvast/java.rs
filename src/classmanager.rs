@@ -146,7 +146,6 @@ impl ClassManager {
     }
 
     fn get_classdef(&self, id: &ClassId) -> &ClassDef {
-        debug!("get_classdef {}", *id);
         self.classdefs.get(&id).unwrap()
     }
 

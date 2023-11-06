@@ -3,6 +3,7 @@ use anyhow::{anyhow, Error};
 use crate::class::ObjectRef;
 use crate::class::Value::{self, *};
 
+
 pub(crate) fn array_load(index: Value, arrayref: Value) -> Result<Value, Error> {
     if let I32(index) = index {
         let index = index as usize;
@@ -92,7 +93,7 @@ pub(crate) fn array_store(value: Value, index: Value, arrayref: Value) -> Result
                         unreachable!()
                     }
                 }
-                ObjectRef::CharArray(ref mut array) => unsafe{
+                ObjectRef::CharArray(ref mut array) => unsafe {
                     if let I32(value) = value {
                         array[index as usize] = char::from_u32_unchecked(value as u32);
                     } else {

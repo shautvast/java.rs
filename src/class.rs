@@ -119,9 +119,34 @@ impl ObjectRef {
     }
 }
 
+pub enum ArrayType {
+    BOOLEAN = 4,
+    CHAR = 5,
+    FLOAT = 6,
+    DOUBLE = 7,
+    BYTE = 8,
+    SHORT = 9,
+    INT = 10,
+    LONG = 11,
+}
+
 impl ObjectRef {
     pub fn new_object_array(class: &Class, size: usize) -> Self {
         ObjectArray(class.id, Vec::with_capacity(size))
+    }
+
+    pub fn new_array(arraytype: u8, size: usize) -> Self {
+        match arraytype {
+            8 => ByteArray(Vec::with_capacity(size)),
+            9 => ShortArray(Vec::with_capacity(size)),
+            10 => IntArray(Vec::with_capacity(size)),
+            11 => LongArray(Vec::with_capacity(size)),
+            6 => FloatArray(Vec::with_capacity(size)),
+            7 => DoubleArray(Vec::with_capacity(size)),
+            4 => BooleanArray(Vec::with_capacity(size)),
+            5 => CharArray(Vec::with_capacity(size)),
+            _ => unreachable!("impossible array type")
+        }
     }
 
     pub fn new_int_array(size: usize) -> Self {

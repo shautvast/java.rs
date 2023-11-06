@@ -190,6 +190,7 @@ pub const _DUP2_X1: u8 = 93;
 //(0x5d) Duplicate the top one or two operand stack values and insert two or three values down
 pub const _DUP2_X2: u8 = 94; // (0x5e) Duplicate the top one or two operand stack values and insert two, three, or four values down
 
+pub const IADD:u8 = 96;
 pub const _FADD: u8 = 98;
 // (0x62) Add float
 pub const _DADD: u8 = 99; // (0x63) add double
@@ -212,6 +213,7 @@ pub const _FNEG: u8 = 118;
 // (0x76) Negate float
 pub const _DNEG: u8 = 119; // (0x77) Negate double
 
+pub const ISHR:u8 = 122;
 pub const _F2I: u8 = 139;
 // (0x8b) Convert float to int
 pub const _F2L: u8 = 140;
@@ -284,6 +286,7 @@ pub const INVOKESTATIC: u8 = 184;
 // (0xb8) Invoke a class (static) method
 pub const NEW: u8 = 187;
 // (0xbb) Create new object
+pub const NEWARRAY:u8 = 188;
 pub const ANEWARRAY: u8 = 189;
 // (0xbd)
 pub const ARRAYLENGTH: u8 = 190;
@@ -393,6 +396,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[_DUP2  as usize] = "_DUP2" ;
     opcodes[_DUP2_X1  as usize] = "_DUP2_X1" ;
     opcodes[_DUP2_X2  as usize] = "_DUP2_X2" ;
+    opcodes[IADD as usize] = "IADD";
     opcodes[_FADD  as usize] = "_FADD" ;
     opcodes[_DADD  as usize] = "_DADD" ;
     opcodes[_DSUB  as usize] = "_DSUB" ;
@@ -405,6 +409,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[_DREM  as usize] = "_DREM" ;
     opcodes[_FNEG  as usize] = "_FNEG" ;
     opcodes[_DNEG  as usize] = "_DNEG" ;
+    opcodes[ISHR  as usize] = "ISHR" ;
     opcodes[_F2I  as usize] = "_F2I" ;
     opcodes[_F2L  as usize] = "_F2L" ;
     opcodes[_F2D  as usize] = "_F2D" ;
@@ -441,6 +446,7 @@ pub const OPCODES:Lazy<Vec<&str>> = Lazy::new(|| {
     opcodes[INVOKESPECIAL  as usize] = "INVOKESPECIAL" ;
     opcodes[INVOKESTATIC  as usize] = "INVOKESTATIC" ;
     opcodes[NEW  as usize] = "NEW" ;
+    opcodes[NEWARRAY  as usize] = "NEWARRAY" ;
     opcodes[ANEWARRAY  as usize] = "ANEWARRAY" ;
     opcodes[ARRAYLENGTH  as usize] = "ARRAYLENGTH" ;
     opcodes[_ATHROW  as usize] = "_ATHROW" ;

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Error;
+use log::debug;
 
 use crate::class::{Class, Value};
 use crate::classloader::classdef::CpEntry;
@@ -17,7 +18,6 @@ pub(crate) fn get_static(this_class: &Class, field_index: u16) -> Result<Value, 
     let (name_index, _) =
         classdef.cp_name_and_type(field_name_and_type_index);
     let field_name = classdef.cp_utf8(name_index);
-
     let that_class_name_index = classdef.cp_class_ref(class_index);
     let that_class_name = classdef.cp_utf8(that_class_name_index);
     classmanager::load_class_by_name(that_class_name);
@@ -30,7 +30,8 @@ pub(crate) fn get_static(this_class: &Class, field_index: u16) -> Result<Value, 
         .get(field_name)
         .unwrap(); // safe because field must be there
 
-    Ok(classmanager::get_static(&this_class.id, type_index.index))
+    debug!("get_static {}.{}", that_class_name, field_name);
+    Ok(classmanager::get_static(&that_class.id, type_index.index))
 }
 
 pub(crate) fn get_name_and_type(cp: &HashMap<u16, CpEntry>, index: u16) -> Option<MethodSignature> {
