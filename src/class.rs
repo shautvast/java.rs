@@ -1,4 +1,9 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
+use std::rc::Rc;
+
+use log::debug;
+use rand::random;
 
 use crate::class::ObjectRef::*;
 
@@ -41,7 +46,7 @@ impl Class {
             .iter()
             .map(|(_, v)| v.len())
             .reduce(|acc, e| acc + e)
-            .unwrap()
+            .unwrap_or(0)
     }
 }
 
@@ -71,7 +76,7 @@ impl Value {
         if let Value::I32(v) = self {
             v
         } else {
-            panic!();
+            panic!("{:?} is not I32", self);
         }
     }
 
@@ -96,7 +101,7 @@ pub enum ObjectRef {
     CharArray(Vec<char>),
     StringArray(Vec<String>),
     ObjectArray(ClassId, Vec<ObjectRef>),
-    Object(Object),
+    Object(Rc<RefCell<Object>>),
     //Box necessary??
     Class(Class),
 }
@@ -170,10 +175,11 @@ fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
     unsafe { Vec::from_raw_parts(p as *mut i8, len, cap) }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Object {
     // locked: bool,
     // hashcode: i32,
+    pub id: u32,
     pub class_id: ClassId,
     pub data: Vec<Value>,
 } //arrays
@@ -183,6 +189,7 @@ impl Object {
     pub fn new(class: &Class) -> Self {
         let instance_data = Object::init_fields(class);
         Self {
+            id: random(),
             class_id: class.id,
             data: instance_data,
         }
@@ -190,7 +197,7 @@ impl Object {
 
     // initializes all non-static fields to their default values
     pub(crate) fn init_fields(class: &Class) -> Vec<Value> {
-        let mut field_data = Vec::with_capacity(class.n_object_fields());
+        let mut field_data = vec![Value::Null;class.n_object_fields()];
 
         for (_, fields) in &class.object_field_mapping {
             for (_, type_index) in fields {
@@ -204,15 +211,16 @@ impl Object {
                     "D" => Value::F64(0.0),
                     _ => Value::Null,
                 };
-                field_data.push(value.into());
+                field_data[type_index.index] = value.into();
             }
         }
 
         field_data
     }
 
-    pub fn set(&mut self, class: &Class, declared_type: &str, field_name: &str, value: Value) {
-        let type_index = class
+    pub fn set(&mut self, runtime_type: &Class, declared_type: &str, field_name: &str, value: Value) {
+        debug!("set {:?}.{}", runtime_type.name, field_name);
+        let type_index = runtime_type
             .object_field_mapping
             .get(declared_type)
             .unwrap()
@@ -221,14 +229,16 @@ impl Object {
         self.data[type_index.index] = value;
     }
 
-    pub fn get(&mut self, instancedef: &Class, declared_type: &String, field_name: &String) -> &Value {
-        let type_index = instancedef
+    pub fn get(&self, runtime_type: &Class, declared_type: &String, field_name: &String) -> &Value {
+        let type_index = runtime_type
             .object_field_mapping
             .get(declared_type)
             .unwrap()
             .get(field_name)
             .unwrap();
-        &self.data[type_index.index]
+        debug!("get {:?}:{}.{}:{} @{}", runtime_type, declared_type, field_name, type_index.type_name, type_index.index);
+        debug!("from data {:?}", self.data);
+        self.data.get(type_index.index).unwrap()
     }
 
     // fn get_field_name(&self, cp_index: &u16) -> &str {

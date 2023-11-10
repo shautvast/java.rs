@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use anyhow::Error;
-use log::{debug, info};
+use log::debug;
 use once_cell::sync::Lazy;
 
 use crate::class::{ObjectRef, Value};
@@ -41,14 +43,14 @@ fn cmdProps(vm: &mut Vm, stackframes: &mut Vec<StackFrame>) -> Result<Value, Err
     classmanager::load_class_by_name("java/util/HashMap");
     let hashmap_class = classmanager::get_class_by_name("java/util/HashMap").unwrap();
     let hashmap = Vm::new_instance(hashmap_class);
-    let hashmap = Value::Ref(Object(hashmap));
-    vm.execute_special(stackframes, "java/util/HashMap", "<init>()V", vec![hashmap.clone()]);
+    let hashmap = Value::Ref(Object(Rc::new(RefCell::new(hashmap))));
+    vm.execute_special(stackframes, "java/util/HashMap", "<init>()V", vec![hashmap.clone()])?;
     Ok(hashmap)
 }
 
-fn vmProperties(vm: &mut Vm, stackframes: &mut Vec<StackFrame>) -> Result<Value, Error> {
+fn vmProperties(_vm: &mut Vm, _stackframes: &mut Vec<StackFrame>) -> Result<Value, Error> {
     let props: Lazy<Vec<String>> = Lazy::new(|| {
-        let mut vec: Vec<String> = Vec::new();
+        let vec: Vec<String> = Vec::new();
         //TODO insert some values
         vec
     });

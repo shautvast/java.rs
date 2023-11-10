@@ -33,7 +33,6 @@ pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, E
             maybe_path.push('/');
             maybe_path.push_str(class_name);
             maybe_path.push_str(".class");
-            // println!("{}", maybe_path);
             if fs::metadata(&maybe_path)?.is_file() {
                 return Ok(maybe_path);
             }

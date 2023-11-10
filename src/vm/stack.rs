@@ -23,10 +23,6 @@ impl StackFrame {
         self.data.push(val);
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.data.len()
-    }
-
     pub(crate) fn pop(&mut self) -> Result<Value, Error> {
         Ok(self.data.pop().unwrap())
     }

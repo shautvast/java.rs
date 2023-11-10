@@ -117,7 +117,7 @@ fn check_magic(bytecode: &[u8], pos: &mut usize) {
 
 fn read_constant_pool_entry(cp_index: &mut u16, index: &mut usize, bytecode: &[u8]) -> CpEntry {
     let tag = read_u8(bytecode, index);
-    // println!("tag {}", tag);
+    // debug!("tag {}", tag);
     match tag {
         1 => {
             let len = read_u16(bytecode, index) as usize;
