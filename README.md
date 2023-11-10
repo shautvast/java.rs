@@ -8,13 +8,11 @@ actually:
 **so far**
 * starts a main class (TODO cmdline args)
 * loads classes from a classpath, including jar/jmod files
-* instantiates classes 
+* instantiates classes
 * runs bytecode (TODO more opcodes)
-* has INVOKEVIRTUAL and INVOKESPECIAL, including stackframes (TODO more invokes)
-* has a heap
+* native methods (not dynamic)
 
 **more TODO's**
-* native methods 
 * stacktraces
 * check visibility
 * IO
