@@ -3,11 +3,11 @@ use std::io::Write;
 use std::rc::Rc;
 
 use anyhow::Error;
-use log::{debug, error};
+use log::debug;
 
 use crate::class::{Class, Object, ObjectRef, Value};
-use crate::class::Value::{F32, F64, I32, I64, Null, Ref, Utf8, Void};
-use crate::classloader::classdef::{AttributeType, CpEntry, Method, Modifier};
+use crate::class::Value::{F32, F64, I32, I64, Null, Ref, Void};
+use crate::classloader::classdef::{AttributeType, Modifier};
 use crate::classloader::io::{read_u16, read_u8};
 use crate::classmanager;
 use crate::classmanager::get_class_by_id;
@@ -67,17 +67,11 @@ impl Vm {
         method_name: &str,
         args: Vec<Value>,
     ) -> Result<Value, Error> {
-        for arg in &args {
-            if let Ref(r) = arg {
-                debug!("arg {:?}",r);
-            } else {
-                debug!("arg {:?}",arg);
-            }
-        }
-
+        // this can't be null
         if let Null = args[0] {
             panic!("NPE");
         }
+
         if let Ref(this) = &args[0] {
             if let ObjectRef::Object(this) = this {
                 let thisb= this.borrow();
@@ -95,8 +89,7 @@ impl Vm {
 
                         for parent_id in &class.parents {
                             let classdef = classmanager::get_classdef(parent_id);
-                            let method = classdef.get_method(method_name);
-                            if let Some(_) = method {
+                            if classdef.has_method(method_name) {
                                 let class= get_class_by_id(parent_id).unwrap();
                                 return self.execute_class(stack, class, method_name, args.clone());
                             }
@@ -105,16 +98,12 @@ impl Vm {
                         panic!("ClassNotFound");
                     }
                 }
-            } else if let ObjectRef::Class(_class) = this {
-                //TODO is this right??
-                classmanager::load_class_by_name("java/lang/Class");//TODO preload, so this is not needed
+            } else if let ObjectRef::Class(_class) = this { // special case for Class ?
                 let klazz = classmanager::get_class_by_name("java/lang/Class").unwrap();
-                // let klazzdef = self.classmanager.get_classdef(&klazz.id);
                 return self.execute_class(stack, klazz, method_name, args);
             }
         }
-        println!("this is not an object reference {}", class_name);
-        panic!();
+        panic!("Method {} not found in class {}", method_name, class_name);
     }
 
     pub fn execute_special(

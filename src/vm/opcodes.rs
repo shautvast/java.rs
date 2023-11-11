@@ -302,7 +302,7 @@ pub const MONITOREXIT: u8 = 195;
 pub const IFNULL: u8 = 198;
 pub const IFNONNULL: u8 = 199;
 
-pub const OPCODES: Lazy<Vec<&str>> = Lazy::new(|| {
+pub static OPCODES: Lazy<Vec<&str>> = Lazy::new(|| {
     let mut opcodes = vec![""; 256];
     opcodes[NOP as usize] = "NOP";
     opcodes[ACONST_NULL as usize] = "ACONST_NULL";

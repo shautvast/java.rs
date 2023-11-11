@@ -66,6 +66,10 @@ impl ClassDef {
         self.methods.get(name)
     }
 
+    pub fn has_method(&self, name: &str) -> bool {
+        self.methods.contains_key(name)
+    }
+
     pub fn cp_field_ref(&self, index: &u16) -> (&u16, &u16) {
         if let CpEntry::Fieldref(class_index, name_and_type_index) =
             self.constant_pool.get(index).unwrap()

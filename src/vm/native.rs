@@ -2,7 +2,8 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use anyhow::{anyhow, Error};
+
+use anyhow::Error;
 use log::debug;
 use once_cell::sync::Lazy;
 
@@ -64,7 +65,7 @@ fn cmdProps(vm: &mut Vm, stackframes: &mut Vec<StackFrame>) -> Result<Value, Err
     Ok(hashmap)
 }
 
-fn vmProperties(_vm: &mut Vm, _stackframes: &mut Vec<StackFrame>) -> Result<Value, Error> {
+fn vmProperties(_vm: &mut Vm, _stackframes: &mut [StackFrame]) -> Result<Value, Error> {
     let props: Lazy<Vec<String>> = Lazy::new(|| {
         let vec: Vec<String> = Vec::new();
         //TODO insert some values

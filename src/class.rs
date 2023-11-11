@@ -1,11 +1,14 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
+use std::fmt;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use log::debug;
 use rand::random;
 
 use crate::class::ObjectRef::*;
+use crate::classloader::classdef::CpEntry;
 
 /// ClassId facilitates loose coupling between classes, classdefs and objects
 pub type ClassId = usize;
@@ -175,8 +178,6 @@ fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
 
 #[derive(Debug)]
 pub struct Object {
-    // locked: bool,
-    // hashcode: i32,
     pub id: u32,
     pub class_id: ClassId,
     pub data: Vec<Value>,
@@ -195,7 +196,7 @@ impl Object {
 
     // initializes all non-static fields to their default values
     pub(crate) fn init_fields(class: &Class) -> Vec<Value> {
-        let mut field_data = vec![Value::Null;class.n_object_fields()];
+        let mut field_data = vec![Value::Null; class.n_object_fields()];
 
         for (_, fields) in &class.object_field_mapping {
             for (_, type_index) in fields {
@@ -238,24 +239,4 @@ impl Object {
         debug!("from data {:?}", self.data);
         self.data.get(type_index.index).unwrap()
     }
-
-    // fn get_field_name(&self, cp_index: &u16) -> &str {
-    //     if let CpEntry::Utf8(name) = self.class.constant_pool.get(cp_index).unwrap() {
-    //         return name;
-    //     }
-    //     panic!()
-    // }
 }
-
-// impl Debug for Object {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         // let fields: Vec<String> = self.data.unwrap().iter().map(|(k)| {
-//         //     // let mut r: String = self.get_field_name(k).into();
-//         //     // r.push(':');
-//         //     // r.push_str(format!("{:?}").as_str());
-//         //     // r
-//         // }
-//         // ).collect();
-//         write!(f, "{}", self.class.name)
-//     }
-// }
