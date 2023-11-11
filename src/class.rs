@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
-use std::fmt;
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -8,7 +7,6 @@ use log::debug;
 use rand::random;
 
 use crate::class::ObjectRef::*;
-use crate::classloader::classdef::CpEntry;
 
 /// ClassId facilitates loose coupling between classes, classdefs and objects
 pub type ClassId = usize;
@@ -42,6 +40,7 @@ pub struct Class {
 }
 
 impl Class {
+    /// gets the number of non-static fields on the class
     pub(crate) fn n_object_fields(&self) -> usize {
         self.object_field_mapping
             .iter()
@@ -103,7 +102,6 @@ pub enum ObjectRef {
     StringArray(Vec<String>),
     ObjectArray(ClassId, Vec<ObjectRef>),
     Object(Rc<RefCell<Object>>),
-    //Box necessary??
     Class(Class),
 }
 
@@ -178,13 +176,17 @@ fn into_vec_i8(v: Vec<u8>) -> Vec<i8> {
 
 #[derive(Debug)]
 pub struct Object {
+    /// unique id for instance
     pub id: u32,
+    /// loose ref to class
     pub class_id: ClassId,
+    /// instance field data
     pub data: Vec<Value>,
-} //arrays
+}
 
 // object, not array
 impl Object {
+
     pub fn new(class: &Class) -> Self {
         let instance_data = Object::init_fields(class);
         Self {

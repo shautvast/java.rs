@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use crate::class::{ObjectRef, Value};
 use crate::class::ObjectRef::Object;
 use crate::class::Value::{I32, Void};
-use crate::classmanager;
+use crate::{class, classmanager};
 use crate::vm::stack::StackFrame;
 use crate::vm::Vm;
 
@@ -59,8 +59,7 @@ fn jdk_internal_util_SystemProps_Raw(vm: &mut Vm, stackframes: &mut Vec<StackFra
 fn cmdProps(vm: &mut Vm, stackframes: &mut Vec<StackFrame>) -> Result<Value, Error> {
     classmanager::load_class_by_name("java/util/HashMap");
     let hashmap_class = classmanager::get_class_by_name("java/util/HashMap").unwrap();
-    let hashmap = Vm::new_instance(hashmap_class);
-    let hashmap = Value::Ref(Object(Rc::new(RefCell::new(hashmap))));
+    let hashmap = Value::Ref(Object(Rc::new(RefCell::new(class::Object::new(hashmap_class))))); // this is convoluted
     vm.execute_special(stackframes, "java/util/HashMap", "<init>()V", vec![hashmap.clone()])?;
     Ok(hashmap)
 }

@@ -55,10 +55,6 @@ impl Vm {
         vm.execute_static(stack, "java/lang/System", "initPhase1()V", vec![]).expect("cannot create VM");
     }
 
-    pub fn new_instance(class: &Class) -> Object {
-        Object::new(class)
-    }
-
     /// execute the bytecode
     pub fn execute_virtual(
         &mut self,
@@ -516,7 +512,7 @@ impl Vm {
                         classmanager::load_class_by_name(class_name);
                         let class_to_instantiate = classmanager::get_class_by_name(class_name).unwrap();
 
-                        let object = ObjectRef::Object(Rc::new(RefCell::new(Vm::new_instance(
+                        let object = ObjectRef::Object(Rc::new(RefCell::new(Object::new(
                             class_to_instantiate,
                         ))));
                         current_frame(stackframes).push(Ref(object));

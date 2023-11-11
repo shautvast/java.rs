@@ -6,9 +6,10 @@ use anyhow::Error;
 use log::debug;
 
 use crate::class::{Class, ObjectRef, Value};
+use crate::class::ObjectRef::Object;
 use crate::class::Value::{I32, Ref};
 use crate::classloader::classdef::{CpEntry, Method};
-use crate::classmanager;
+use crate::{class, classmanager};
 use crate::vm::stack::StackFrame;
 use crate::vm::Vm;
 use crate::vm::vm::{current_frame, Invocation, MethodSignature};
@@ -90,12 +91,12 @@ pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut V
             let string: Vec<u8> = string.as_bytes().into();
             classmanager::load_class_by_name("java/lang/String");
             let stringclass = classmanager::get_class_by_name("java/lang/String").unwrap();
-            let mut stringinstance = Vm::new_instance(stringclass);
-            stringinstance.set(stringclass, "java/lang/String", "value", Value::Ref(ObjectRef::new_byte_array(string)));
+            let mut stringinstance = class::Object::new(stringclass);
+            stringinstance.set(stringclass, "java/lang/String", "value", Ref(ObjectRef::new_byte_array(string)));
 
             debug!("new string \"{}\"", utf8);
 
-            current_frame(stackframes).push(Ref(ObjectRef::Object(Rc::new(RefCell::new(stringinstance)))));
+            current_frame(stackframes).push(Ref(Object(Rc::new(RefCell::new(stringinstance)))));
         }
         CpEntry::Long(l) => {
             current_frame(stackframes).push(Value::I64(*l));
