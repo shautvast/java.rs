@@ -7,7 +7,7 @@ use log::{debug, error};
 
 use crate::class::{Class, Object, ObjectRef, Value};
 use crate::class::Value::{F32, F64, I32, I64, Null, Ref, Utf8, Void};
-use crate::classloader::classdef::{AttributeType, CpEntry, Modifier};
+use crate::classloader::classdef::{AttributeType, CpEntry, Method, Modifier};
 use crate::classloader::io::{read_u16, read_u8};
 use crate::classmanager;
 use crate::classmanager::get_class_by_id;
@@ -15,7 +15,7 @@ use crate::vm::array::{array_load, array_store};
 use crate::vm::native::invoke_native;
 use crate::vm::opcodes;
 use crate::vm::opcodes::*;
-use crate::vm::operations::{get_signature_for_invoke, get_static};
+use crate::vm::operations::{get_signature_for_invoke, get_static, load_constant};
 use crate::vm::stack::StackFrame;
 
 pub struct Vm {}
@@ -26,6 +26,8 @@ const PATH_SEPARATOR: char = ':';
 
 #[cfg(target_family = "windows")]
 const PATH_SEPARATOR: char = ';';
+
+const MASK_LOWER_5BITS: i32 = 0b00011111;
 
 /// The singlethreaded VM (maybe a future Thread)
 //TODO goto
@@ -220,83 +222,15 @@ impl Vm {
                     }
                     LDC => {
                         let cp_index = read_u8(&code.opcodes, pc) as u16;
-                        let c = method.constant_pool.get(&cp_index).unwrap();
-                        match c {
-                            CpEntry::Integer(i) => {
-                                current_frame(stackframes).push(I32(*i));
-                            }
-                            CpEntry::Float(f) => {
-                                current_frame(stackframes).push(Value::F32(*f));
-                            }
-                            CpEntry::Double(d) => {
-                                current_frame(stackframes).push(Value::F64(*d));
-                            }
-                            CpEntry::StringRef(utf8) => {
-                                //TODO
-                                let string = classmanager::get_classdef(&this_class.id).cp_utf8(utf8);
-                                let string: Vec<u8> = string.as_bytes().into();
-                                classmanager::load_class_by_name("java/lang/String");
-                                let stringclass = classmanager::get_class_by_name("java/lang/String").unwrap();
-                                let mut stringinstance = Vm::new_instance(stringclass);
-                                stringinstance.set(stringclass, "java/lang/String", "value", Value::Ref(ObjectRef::new_byte_array(string)));
-
-                                debug!("new string \"{}\"", utf8);
-
-                                current_frame(stackframes).push(Ref(ObjectRef::Object(Rc::new(RefCell::new(stringinstance)))));
-                            }
-                            CpEntry::Long(l) => {
-                                current_frame(stackframes).push(Value::I64(*l));
-                            }
-                            CpEntry::ClassRef(utf8) => {
-                                let classdef = classmanager::get_classdef(&this_class.id);
-                                let class_name = classdef.cp_utf8(utf8);
-                                classmanager::load_class_by_name(class_name);
-                                let klass_id = classmanager::get_classid(class_name);
-                                if let Some(class) = classmanager::get_classobject(klass_id) {
-                                    current_frame(stackframes).push(class.clone());
-                                } else {
-                                    unreachable!("should not be here");
-                                }
-                            }
-                            _ => {
-                                panic!("add variant {:?}", c)
-                            }
-                        }
+                        load_constant(&cp_index, method, stackframes, this_class);
                     }
                     LDC_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        let cp_entry = method.constant_pool.get(&cp_index).unwrap();
-                        match cp_entry {
-                            CpEntry::Integer(i) => {
-                                current_frame(stackframes).push(I32(*i));
-                            }
-                            CpEntry::Float(f) => {
-                                current_frame(stackframes).push(F32(*f));
-                            }
-                            CpEntry::StringRef(utf8_index) => {
-                                if let CpEntry::Utf8(s) = method.constant_pool.get(utf8_index).unwrap() {
-                                    current_frame(stackframes).push(Utf8(s.to_owned()));
-                                } else {}
-                            }
-                            _ => {
-                                error!("{:?}", cp_entry);
-                                unreachable!()
-                            }
-                        }
+                        load_constant(&cp_index, method, stackframes, this_class);
                     }
                     LDC2_W => {
                         let cp_index = read_u16(&code.opcodes, pc);
-                        match method.constant_pool.get(&cp_index).unwrap() {
-                            CpEntry::Double(d) => {
-                                current_frame(stackframes).push(Value::F64(*d));
-                            }
-                            CpEntry::Long(l) => {
-                                current_frame(stackframes).push(Value::I64(*l));
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        }
+                        load_constant(&cp_index, method, stackframes, this_class);
                     }
                     ILOAD | LLOAD | FLOAD | DLOAD | ALOAD => {
                         // omitting the type checks so far
@@ -362,16 +296,28 @@ impl Vm {
                         debug!("{:?}+{:?}", value1, value2);
                         current_frame(stackframes).push(I32(value1.into_i32() + value2.into_i32()));
                     }
+                    ISUB => {
+                        let value2 = current_frame(stackframes).pop()?;
+                        let value1 = current_frame(stackframes).pop()?;
+                        debug!("{:?}-{:?}", value1, value2);
+                        current_frame(stackframes).push(I32(value1.into_i32() - value2.into_i32()));
+                    }
                     IDIV => {
                         let value2 = current_frame(stackframes).pop()?;
                         let value1 = current_frame(stackframes).pop()?;
                         current_frame(stackframes).push(I32(value1.into_i32() / value2.into_i32()));
                     }
+                    ISHL => {
+                        let value2 = current_frame(stackframes).pop()?;
+                        let value1 = current_frame(stackframes).pop()?;
+                        debug!("{:?} shl {:?}", value1, value2);
+                        current_frame(stackframes).push(I32(value1.into_i32() << (value2.into_i32() & MASK_LOWER_5BITS)));
+                    }
                     ISHR => {
                         let value2 = current_frame(stackframes).pop()?;
                         let value1 = current_frame(stackframes).pop()?;
                         debug!("{:?} shr {:?}", value1, value2);
-                        current_frame(stackframes).push(I32(value1.into_i32() >> (value2.into_i32() & 0b00011111)));
+                        current_frame(stackframes).push(I32(value1.into_i32() >> (value2.into_i32() & MASK_LOWER_5BITS)));
                     }
                     IFEQ | IFNE | IFLT | IFGE | IFGT | IFLE => {
                         let jmp_to = read_u16(&code.opcodes, pc) - 3; // -3 so that offset = location of Cmp opcode
@@ -715,7 +661,7 @@ impl MethodSignature {
     }
 }
 
-fn current_frame(stackframes: &mut Vec<StackFrame>) -> &mut StackFrame {
+pub(crate) fn current_frame(stackframes: &mut Vec<StackFrame>) -> &mut StackFrame {
     let i = stackframes.len() - 1;
     stackframes.get_mut(i).unwrap()
 }

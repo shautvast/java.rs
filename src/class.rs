@@ -7,6 +7,7 @@ use rand::random;
 
 use crate::class::ObjectRef::*;
 
+/// ClassId facilitates loose coupling between classes, classdefs and objects
 pub type ClassId = usize;
 
 #[derive(Debug, Clone)]
@@ -24,20 +25,17 @@ impl TypeIndex {
     }
 }
 
-// could move classdef into here. Saves one hashmap lookup
-// have to look at ownership though
 #[derive(Debug, Clone)]
 pub struct Class {
     pub id: ClassId,
-    pub initialized: bool,
     pub name: String,
     pub superclass: Option<ClassId>,
     pub parents: LinkedList<ClassId>,
     pub interfaces: Vec<ClassId>,
-    // lookup index and type from the name
+    // lookup index and type from the name of the declared class and then field
     pub(crate) object_field_mapping: HashMap<String, HashMap<String, TypeIndex>>,
     pub(crate) static_field_mapping: HashMap<String, HashMap<String, TypeIndex>>,
-    // pub(crate) static_field_data: Vec<Value>,
+    // pub(crate) static_field_data: Vec<Value> // moved to classmanager
 }
 
 impl Class {

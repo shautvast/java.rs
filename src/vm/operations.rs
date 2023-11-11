@@ -1,12 +1,17 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use anyhow::Error;
 use log::debug;
 
-use crate::class::{Class, Value};
-use crate::classloader::classdef::CpEntry;
+use crate::class::{Class, ObjectRef, Value};
+use crate::class::Value::{I32, Ref};
+use crate::classloader::classdef::{CpEntry, Method};
 use crate::classmanager;
-use crate::vm::vm::{Invocation, MethodSignature};
+use crate::vm::stack::StackFrame;
+use crate::vm::Vm;
+use crate::vm::vm::{current_frame, Invocation, MethodSignature};
 
 /// the place for opcode implementations that are a bit long
 
@@ -64,6 +69,52 @@ pub(crate) fn get_signature_for_invoke(cp: &HashMap<u16, CpEntry>, index: u16) -
         }
     }
     None
+}
+
+/// LDC in all varieties (LDC, LDC_W, LDC2_W)
+pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut Vec<StackFrame>, this_class: &Class){
+    let c = method.constant_pool.get(cp_index).unwrap();
+    match c {
+        CpEntry::Integer(i) => {
+            current_frame(stackframes).push(I32(*i));
+        }
+        CpEntry::Float(f) => {
+            current_frame(stackframes).push(Value::F32(*f));
+        }
+        CpEntry::Double(d) => {
+            current_frame(stackframes).push(Value::F64(*d));
+        }
+        CpEntry::StringRef(utf8) => {
+            //TODO
+            let string = classmanager::get_classdef(&this_class.id).cp_utf8(utf8);
+            let string: Vec<u8> = string.as_bytes().into();
+            classmanager::load_class_by_name("java/lang/String");
+            let stringclass = classmanager::get_class_by_name("java/lang/String").unwrap();
+            let mut stringinstance = Vm::new_instance(stringclass);
+            stringinstance.set(stringclass, "java/lang/String", "value", Value::Ref(ObjectRef::new_byte_array(string)));
+
+            debug!("new string \"{}\"", utf8);
+
+            current_frame(stackframes).push(Ref(ObjectRef::Object(Rc::new(RefCell::new(stringinstance)))));
+        }
+        CpEntry::Long(l) => {
+            current_frame(stackframes).push(Value::I64(*l));
+        }
+        CpEntry::ClassRef(utf8_index) => {
+            let classdef = classmanager::get_classdef(&this_class.id);
+            let class_name = classdef.cp_utf8(utf8_index);
+            classmanager::load_class_by_name(class_name);
+            let klass_id = classmanager::get_classid(class_name);
+            if let Some(class) = classmanager::get_classobject(klass_id) {
+                current_frame(stackframes).push(class.clone());
+            } else {
+                unreachable!("should not be here");
+            }
+        }
+        _ => {
+            panic!("add variant {:?}", c)
+        }
+    }
 }
 
 

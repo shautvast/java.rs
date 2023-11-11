@@ -2,13 +2,13 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use log::debug;
 use once_cell::sync::Lazy;
 
 use crate::class::{ObjectRef, Value};
 use crate::class::ObjectRef::Object;
-use crate::class::Value::Void;
+use crate::class::Value::{I32, Void};
 use crate::classmanager;
 use crate::vm::stack::StackFrame;
 use crate::vm::Vm;
@@ -17,15 +17,31 @@ pub fn invoke_native(vm: &mut Vm, stackframes: &mut Vec<StackFrame>, class_name:
     debug!("native {}.{}", class_name, method_name);
 
     match class_name.as_str() {
-        "java/lang/Class" => java_lang_class(vm, method_name),
+        "java/lang/Class" => java_lang_Class(vm, method_name),
+        "java/lang/System" => java_lang_System(vm, method_name),
+        "jdk/internal/misc/Unsafe" => jdk_internal_misc_Unsafe(vm, method_name),
         "jdk/internal/util/SystemProps$Raw" => jdk_internal_util_SystemProps_Raw(vm, stackframes, method_name),
-        _ => Ok(Void)
+        _ => unimplemented!("")
     }
 }
 
-fn java_lang_class(_vm: &Vm, method_name: &str) -> Result<Value, Error> {
+fn java_lang_Class(_vm: &Vm, method_name: &str) -> Result<Value, Error> {
     Ok(match method_name {
         "desiredAssertionStatus0(Ljava/lang/Class;)Z" => Value::BOOL(false),
+        _ => Void
+    })
+}
+
+fn java_lang_System(_vm: &Vm, method_name: &str) -> Result<Value, Error> {
+    Ok(match method_name {
+        _ => Void
+    })
+}
+
+fn jdk_internal_misc_Unsafe(_vm: &Vm, method_name: &str) -> Result<Value, Error> {
+    Ok(match method_name {
+        "arrayBaseOffset0(Ljava/lang/Class;)I" => I32(0), //TODO surely this is not right
+        "arrayIndexScale0(Ljava/lang/Class;)I" => I32(0), //TODO surely this is not right
         _ => Void
     })
 }

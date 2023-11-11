@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
 use std::rc::Rc;
+
 use log::debug;
 use once_cell::sync::Lazy;
 
@@ -12,6 +13,7 @@ use crate::classloader::io::PATH_SEPARATOR;
 use crate::vm::Vm;
 
 static mut CLASSMANAGER: Lazy<ClassManager> = Lazy::new(|| ClassManager::new());
+static PRIMITIVES: Lazy<Vec<&str>> = Lazy::new(|| vec!["B", "S", "I", "J", "F", "D", "Z", "J", "C"]);
 
 pub fn init() {
     unsafe {
@@ -151,23 +153,64 @@ impl ClassManager {
         self.classdefs.get(&id).unwrap()
     }
 
+    /// loads the class if not already there
     fn load_class_by_name(&mut self, name: &str) {
-        let id = self.names.get(name);
-        match id {
-            Some(id) => if self.classes.get(id).is_none() {
-                self.add_class(name);
+        debug!("load class {}", name);
+        // determine no of dimensions and get type of array if any
+        let mut chars = name.chars();
+        let mut num_dims = 0;
+        while let Some(c) = chars.nth(num_dims) {
+            if c == '[' {
+                num_dims += 1;
+            } else {
+                break;
             }
-            None => {
-                self.add_class(name);
+        }
+        let mut type_name = name[num_dims..name.len()].to_owned();
+
+        if num_dims > 0 {
+            if !PRIMITIVES.contains(&type_name.as_str()){
+                type_name = type_name[1..type_name.len()].to_owned();
+            }
+            let id = self.get_or_new_id(name);
+            if !self.class_objects.contains_key(&id) {
+                let cls = self.get_class_by_name("java/lang/Class").unwrap();
+                let mut instance = Object::new(cls);
+                instance.set(cls, "java/lang/Class", "name", Value::Utf8(name.into()));
+                let instance = Ref(ObjectRef::Object(Rc::new(RefCell::new(instance))));
+
+                self.class_objects.insert(id, instance);
+            }
+        } else {
+            // in cache?
+            let id = self.names.get(&type_name);
+            match id {
+                Some(id) => if self.classes.get(id).is_none() {
+                    self.add_class(&type_name);
+                }
+                None => {
+                    self.add_class(&type_name);
+                }
             }
         }
     }
 
+    /// get optional classid from cache
     fn get_class_by_name(&self, name: &str) -> Option<&Class> {
         let id = self.names.get(name);
         self.classes.get(id.unwrap())
     }
 
+    /// adds the class and calculates the 'offset' of it's fields (static and non-static)
+    /// this is a map (declared-class -> map (field-name -> type_index))
+    /// -> fields are not polymorphic, meaning a field can exist in the class and in the superclass and can be addressed individually (no hiding)
+    /// -> the bytecode will know what declared type field is needed
+    ///
+    /// type_index is tuple (field-type, index)
+    /// field-type is a string
+    /// index is an index into the list of values that object instances will use to store the values
+    ///
+    /// the function also instantiates a (java.lang.) Class object for each loaded class
     fn add_class(&mut self, name: &str) -> ClassId {
         debug!("add class {}", name);
         let this_classid = self.load(name);
@@ -202,11 +245,11 @@ impl ClassManager {
             .map(|n| *self.names.get(n.as_str()).unwrap())
             .collect();
 
+        // initial values for static fields (before static init)
         self.static_class_data.insert(this_classid, Self::set_field_data(&static_field_mapping));
 
         self.classes.insert(this_classid, Class {
             id: this_classid,
-            initialized: false,
             name: name.into(),
             superclass: superclass_id,
             parents,
@@ -215,6 +258,7 @@ impl ClassManager {
             static_field_mapping,
         });
 
+        // add a new Class instance
         if name != "java/lang/Class" {
             let cls = self.get_class_by_name("java/lang/Class").unwrap();
             let mut instance = Object::new(cls);
@@ -223,15 +267,16 @@ impl ClassManager {
 
             self.class_objects.insert(this_classid, instance);
         }
-        let clinit = this_classdef.methods.contains_key("<clinit>()V");
 
-        if clinit {
+        // run static init
+        if this_classdef.methods.contains_key("<clinit>()V") {
             self.vm.execute_special(&mut vec![], name, "<clinit>()V", vec![]).unwrap();
         }
 
         this_classid
     }
 
+    /// like described above
     fn add_fields_for_this_or_parents(object_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
                                       static_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
                                       object_field_map_index: &mut usize,
@@ -269,15 +314,20 @@ impl ClassManager {
 
     /// loads the class and returns it's dependencies
     fn load_class_and_deps(&mut self, name: &str) -> (ClassId, Vec<String>) {
-        let id = *self.names.entry(name.to_string()).or_insert_with(|| {
-            self.current_id += 1;
-            self.current_id
-        });
+        let id = self.get_or_new_id(name);
 
         let classdef = self.classdefs
             .entry(id)
             .or_insert_with(|| classloader::get_classdef(&self.classpath, name).expect("ClassNotFound"));
         (id, inspect_dependencies(classdef))
+    }
+
+    fn get_or_new_id(&mut self, name: &str) -> ClassId {
+        let id = *self.names.entry(name.to_string()).or_insert_with(|| {
+            self.current_id += 1;
+            self.current_id
+        });
+        id
     }
 
     pub(crate) fn set_field_data(field_mapping: &HashMap<String, HashMap<String, TypeIndex>>) -> Vec<Value> {
@@ -326,7 +376,9 @@ pub(crate) fn inspect_dependencies(classdef: &ClassDef) -> Vec<String> {
 #[cfg(test)]
 mod test {
     use std::rc::Rc;
+
     use crate::classloader::classdef::{CpEntry, Field};
+
     use super::*;
 
     #[test]
@@ -372,7 +424,7 @@ mod test {
         let mut fields_declared_by_java_lang_class = HashMap::new();
         fields_declared_by_java_lang_class.insert("name".to_owned(), TypeIndex { type_name: "java/lang/String".into(), index: 0 });
         class_field_mapping.insert("java/lang/Class".to_owned(), fields_declared_by_java_lang_class);
-        classes.insert(3, Class { id: 3, initialized: true, name: "".into(), superclass: None, parents: LinkedList::new(), interfaces: vec![], object_field_mapping: class_field_mapping, static_field_mapping: HashMap::new() });
+        classes.insert(3, Class { id: 3, name: "".into(), superclass: None, parents: LinkedList::new(), interfaces: vec![], object_field_mapping: class_field_mapping, static_field_mapping: HashMap::new() });
 
         let mut cm = ClassManager {
             static_class_data: HashMap::new(),
