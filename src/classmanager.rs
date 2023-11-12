@@ -16,6 +16,7 @@ static mut CLASSMANAGER: Lazy<ClassManager> = Lazy::new(|| ClassManager::new());
 static PRIMITIVES: Lazy<Vec<&str>> = Lazy::new(|| vec!["B", "S", "I", "J", "F", "D", "Z", "J", "C"]);
 
 pub fn init() {
+    debug!("classmanager init");
     unsafe {
         CLASSMANAGER.classes.clear();
         CLASSMANAGER.names.clear();
@@ -31,9 +32,9 @@ pub fn set_classpath(classpath: &str) {
     }
 }
 
-pub fn get_class_by_id(id: &ClassId) -> Option<&'static Class> {
+pub fn get_class_by_id(id: ClassId) -> Option<&'static Class> {
     unsafe {
-        CLASSMANAGER.get_class_by_id(id)
+        CLASSMANAGER.get_class_by_id(&id)
     }
 }
 
@@ -43,15 +44,15 @@ pub fn classdef_name(id: &ClassId) -> Option<String> {
     }
 }
 
-pub fn get_classid(name: &str) -> &ClassId {
+pub fn get_classid(name: &str) -> ClassId {
     unsafe {
-        CLASSMANAGER.get_classid(name)
+        CLASSMANAGER.get_classid(name).clone()
     }
 }
 
-pub fn get_classdef(id: &ClassId) -> &ClassDef {
+pub fn get_classdef(id: ClassId) -> &'static ClassDef {
     unsafe {
-        CLASSMANAGER.get_classdef(id)
+        CLASSMANAGER.get_classdef(&id)
     }
 }
 
@@ -79,15 +80,15 @@ pub fn get_static(id: &ClassId, index: usize) -> Value {
     }
 }
 
-pub fn set_static(id: &ClassId, index: usize, value: Value) {
+pub fn set_static(id: ClassId, index: usize, value: Value) {
     unsafe {
-        CLASSMANAGER.static_class_data.get_mut(id).unwrap()[index] = value;
+        CLASSMANAGER.static_class_data.get_mut(&id).unwrap()[index] = value;
     }
 }
 
-pub fn get_classobject(id: &ClassId) -> Option<&Value> {
+pub fn get_classobject(id: ClassId) -> Option<&'static Value> {
     unsafe {
-        CLASSMANAGER.class_objects.get(id)
+        CLASSMANAGER.class_objects.get(&id)
     }
 }
 
@@ -198,7 +199,8 @@ impl ClassManager {
     /// get optional classid from cache
     fn get_class_by_name(&self, name: &str) -> Option<&Class> {
         let id = self.names.get(name);
-        self.classes.get(id.unwrap())
+        let t = self.classes.get(id.unwrap());
+        t
     }
 
     /// adds the class and calculates the 'offset' of it's fields (static and non-static)

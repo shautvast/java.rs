@@ -5,20 +5,19 @@ use std::rc::Rc;
 use anyhow::Error;
 use log::debug;
 
-use crate::class::{Class, ObjectRef, Value};
+use crate::{class, classmanager};
+use crate::class::{Class, ClassId, ObjectRef, Value};
 use crate::class::ObjectRef::Object;
 use crate::class::Value::{I32, Ref};
 use crate::classloader::classdef::{CpEntry, Method};
-use crate::{class, classmanager};
 use crate::vm::stack::StackFrame;
-use crate::vm::Vm;
 use crate::vm::vm::{current_frame, Invocation, MethodSignature};
 
 /// the place for opcode implementations that are a bit long
 
 // GET_STATIC opcode
-pub(crate) fn get_static(this_class: &Class, field_index: u16) -> Result<Value, Error> {
-    let classdef = classmanager::get_classdef(&this_class.id);
+pub(crate) fn get_static(this_class: ClassId, field_index: u16) -> Result<Value, Error> {
+    let classdef = classmanager::get_classdef(this_class);
     let (class_index, field_name_and_type_index) =
         classdef.cp_field_ref(&field_index); // all these unwraps are safe as long as the class is valid
     let (name_index, _) =
@@ -73,7 +72,7 @@ pub(crate) fn get_signature_for_invoke(cp: &HashMap<u16, CpEntry>, index: u16) -
 }
 
 /// LDC in all varieties (LDC, LDC_W, LDC2_W)
-pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut Vec<StackFrame>, this_class: &Class){
+pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut Vec<StackFrame>, this_class: ClassId){
     let c = method.constant_pool.get(cp_index).unwrap();
     match c {
         CpEntry::Integer(i) => {
@@ -87,7 +86,7 @@ pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut V
         }
         CpEntry::StringRef(utf8) => {
             //TODO
-            let string = classmanager::get_classdef(&this_class.id).cp_utf8(utf8);
+            let string = classmanager::get_classdef(this_class).cp_utf8(utf8);
             let string: Vec<u8> = string.as_bytes().into();
             classmanager::load_class_by_name("java/lang/String");
             let stringclass = classmanager::get_class_by_name("java/lang/String").unwrap();
@@ -102,7 +101,7 @@ pub(crate) fn load_constant(cp_index: &u16, method: &Method, stackframes: &mut V
             current_frame(stackframes).push(Value::I64(*l));
         }
         CpEntry::ClassRef(utf8_index) => {
-            let classdef = classmanager::get_classdef(&this_class.id);
+            let classdef = classmanager::get_classdef(this_class);
             let class_name = classdef.cp_utf8(utf8_index);
             classmanager::load_class_by_name(class_name);
             let klass_id = classmanager::get_classid(class_name);

@@ -5,12 +5,12 @@ use std::rc::Rc;
 use anyhow::Error;
 use log::debug;
 
-use crate::class::{Class, Object, ObjectRef, Value};
+use crate::class::{Class, ClassId, Object, ObjectRef, Value};
 use crate::class::Value::{F32, F64, I32, I64, Null, Ref, Void};
 use crate::classloader::classdef::{AttributeType, Modifier};
 use crate::classloader::io::{read_u16, read_u8};
 use crate::classmanager;
-use crate::classmanager::get_class_by_id;
+use crate::classmanager::{get_class_by_id, get_classid};
 use crate::vm::array::{array_load, array_store};
 use crate::vm::native::invoke_native;
 use crate::vm::opcodes;
@@ -52,6 +52,7 @@ impl Vm {
 
     fn init(vm: &mut Vm, stack: &mut Vec<StackFrame>) {
         classmanager::load_class_by_name("java/lang/Class");
+        classmanager::load_class_by_name("jdk/internal/misc/Unsafe");
         vm.execute_static(stack, "java/lang/System", "initPhase1()V", vec![]).expect("cannot create VM");
     }
 
@@ -71,12 +72,12 @@ impl Vm {
         if let Ref(this) = &args[0] {
             if let ObjectRef::Object(this) = this {
                 let thisb= this.borrow();
-                let cd = classmanager::get_classdef(&thisb.class_id);
+                let cd = classmanager::get_classdef(thisb.class_id);
                 let method = cd.get_method(method_name);
                 if let Some(method) = method {
                     classmanager::load_class_by_name(class_name);
                     let class = classmanager::get_class_by_name(class_name).unwrap();
-                    return self.execute_class(stack, class, method.name().as_str(), args.clone());
+                    return self.execute_class(stack, class.id, method.name().as_str(), args.clone());
                 } else {
                     let name = classmanager::classdef_name(&this.borrow().class_id);
                     if let Some(name) = name {
@@ -84,10 +85,9 @@ impl Vm {
                         let class = classmanager::get_class_by_name(&name).unwrap();
 
                         for parent_id in &class.parents {
-                            let classdef = classmanager::get_classdef(parent_id);
+                            let classdef = classmanager::get_classdef(*parent_id);
                             if classdef.has_method(method_name) {
-                                let class= get_class_by_id(parent_id).unwrap();
-                                return self.execute_class(stack, class, method_name, args.clone());
+                                return self.execute_class(stack, *parent_id, method_name, args.clone());
                             }
                         }
                     } else {
@@ -96,7 +96,7 @@ impl Vm {
                 }
             } else if let ObjectRef::Class(_class) = this { // special case for Class ?
                 let klazz = classmanager::get_class_by_name("java/lang/Class").unwrap();
-                return self.execute_class(stack, klazz, method_name, args);
+                return self.execute_class(stack, klazz.id, method_name, args);
             }
         }
         panic!("Method {} not found in class {}", method_name, class_name);
@@ -110,8 +110,8 @@ impl Vm {
         args: Vec<Value>,
     ) -> Result<Value, Error> {
         classmanager::load_class_by_name(class_name);
-        let class = classmanager::get_class_by_name(class_name).unwrap();
-        self.execute_class(stack, class, method_name, args)
+        let classid = classmanager::get_classid(class_name);
+        self.execute_class(stack, classid, method_name, args)
     }
 
     pub fn execute_static(
@@ -122,28 +122,28 @@ impl Vm {
         args: Vec<Value>,
     ) -> Result<Value, Error> {
         classmanager::load_class_by_name(class_name);
-        let class = classmanager::get_class_by_name(class_name).unwrap();
-        self.execute_class(stack, class, method_name, args)
+        self.execute_class(stack,  get_classid(class_name), method_name, args)
     }
 
     pub fn execute_class(
         &mut self,
         stackframes: &mut Vec<StackFrame>,
-        this_class: &Class,
+        this_class: ClassId,
         method_name: &str,
         args: Vec<Value>,
     ) -> Result<Value, Error> {
-        debug!("execute {}.{}", this_class.name, method_name);
+        let this_class_name = &get_class_by_id(this_class).unwrap().name;
+        debug!("execute {}.{}", this_class_name, method_name);
 
         //TODO implement dynamic dispatch -> get method from instance
-        let method = classmanager::get_classdef(&this_class.id).get_method(method_name).unwrap();
+        let method = classmanager::get_classdef(this_class).get_method(method_name).unwrap();
         let mut local_params: Vec<Option<Value>> =
             args.clone().iter().map(|e| Some(e.clone())).collect();
         if method.is(Modifier::Native) {
-            return invoke_native(self, stackframes, &this_class.name, method_name, args);
+            return invoke_native(self, stackframes, this_class_name, method_name, args);
         }
         if let AttributeType::Code(code) = method.attributes.get("Code").unwrap() {
-            let stackframe = StackFrame::new(&this_class.name, method_name);
+            let stackframe = StackFrame::new(&this_class_name, method_name);
             stackframes.push(stackframe);
 
             let pc = &mut 0;
@@ -151,6 +151,7 @@ impl Vm {
                 let opcode = read_u8(&code.opcodes, pc);
                 let cur_frame = current_frame(stackframes);
                 debug!("\t{} #{} {} - {:?}", &cur_frame.at, &*pc - 1, opcodes::OPCODES[opcode as usize], cur_frame.data);
+                debug!("id {}", this_class);
                 match opcode {
                     ACONST_NULL => {
                         current_frame(stackframes).push(Value::Null);
@@ -337,7 +338,7 @@ impl Vm {
                         current_frame(stackframes).push(field_value);
                     }
                     PUTSTATIC => {
-                        let classdef = classmanager::get_classdef(&this_class.id);
+                        let classdef = classmanager::get_classdef(this_class);
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
                             classdef.cp_field_ref(&cp_index); // all these unwraps are safe as long as the class is valid
@@ -354,10 +355,10 @@ impl Vm {
                             .unwrap()
                             .index;
                         let value = current_frame(stackframes).pop()?;
-                        classmanager::set_static(&this_class.id, val_index, value);
+                        classmanager::set_static(this_class, val_index, value);
                     }
                     GETFIELD => {
-                        let classdef = classmanager::get_classdef(&this_class.id);
+                        let classdef = classmanager::get_classdef(this_class);
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
                             classdef.cp_field_ref(&cp_index);
@@ -371,7 +372,7 @@ impl Vm {
                         let objectref = current_frame(stackframes).pop()?;
                         if let Ref(instance) = objectref {
                             if let ObjectRef::Object(object) = instance {
-                                let runtime_type = classmanager::get_class_by_id(&object.borrow().class_id).unwrap();
+                                let runtime_type = classmanager::get_class_by_id(object.borrow().class_id).unwrap();
                                 let object = object.borrow();
                                 let value = object.get(runtime_type, declared_type, field_name);
                                 current_frame(stackframes).push(value.clone());
@@ -383,7 +384,7 @@ impl Vm {
                         }
                     }
                     PUTFIELD => {
-                        let classdef = classmanager::get_classdef(&this_class.id);
+                        let classdef = classmanager::get_classdef(this_class);
                         let cp_index = read_u16(&code.opcodes, pc);
                         let (class_index, field_name_and_type_index) =
                             classdef.cp_field_ref(&cp_index);
@@ -397,42 +398,8 @@ impl Vm {
                         let objectref = current_frame(stackframes).pop()?;
                         if let Ref(instance) = objectref {
                             if let ObjectRef::Object(object) = instance {
-                                let runtime_type = classmanager::get_class_by_id(&object.borrow().class_id).unwrap();
+                                let runtime_type = classmanager::get_class_by_id(object.borrow().class_id).unwrap();
                                 object.borrow_mut().set(runtime_type, declared_type, field_name, value);
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    INVOKESPECIAL => {
-                        // TODO differentiate these opcodes
-                        let cp_index = read_u16(&code.opcodes, pc);
-                        if let Some(invocation) =
-                            get_signature_for_invoke(&method.constant_pool, cp_index)
-                        {
-                            debug!("invoke {:?}", invocation);
-                            let mut args = Vec::with_capacity(invocation.method.num_args);
-                            for _ in 0..invocation.method.num_args {
-                                args.insert(0, current_frame(stackframes).pop()?.clone());
-                            }
-                            args.insert(0, current_frame(stackframes).pop()?);
-                            let return_value = self.execute_special(stackframes,
-                                                                    &invocation.class_name,
-                                                                    &invocation.method.name,
-                                                                    args,
-                            )?;
-                            if let Ref(objectref) = &return_value {
-                                if let ObjectRef::Object(object) = objectref {
-                                    debug!("return {:?}", object);
-                                }
-                            } else {
-                                debug!("return {:?}", return_value);
-                            }
-                            match return_value {
-                                Void => {}
-                                _ => {
-                                    current_frame(stackframes).push(return_value.clone());
-                                }
                             }
                         } else {
                             unreachable!()
@@ -456,6 +423,44 @@ impl Vm {
                                 &invocation.method.name,
                                 args,
                             )?;
+                            if let Ref(objectref) = &return_value {
+                                if let ObjectRef::Object(object) = objectref {
+                                    debug!("return {:?}", object);
+                                }
+                            } else {
+                                debug!("return {:?}", return_value);
+                            }
+                            match return_value {
+                                Void => {}
+                                _ => {
+                                    current_frame(stackframes).push(return_value.clone());
+                                }
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    INVOKESPECIAL => {
+                        // TODO differentiate these opcodes
+                        let cp_index = read_u16(&code.opcodes, pc);
+                        if let Some(invocation) =
+                            get_signature_for_invoke(&method.constant_pool, cp_index)
+                        {
+                            debug!("id before new {}", this_class);
+                            let mut args = Vec::with_capacity(invocation.method.num_args);
+                            for _ in 0..invocation.method.num_args {
+                                args.insert(0, current_frame(stackframes).pop()?.clone());
+                            }
+                            args.insert(0, current_frame(stackframes).pop()?);
+                            debug!("invoke special{:?}", invocation);
+
+                            let return_value = self.execute_special(stackframes,
+                                                                    &invocation.class_name,
+                                                                    &invocation.method.name,
+                                                                    args,
+                            )?;
+                            // let return_value = Null;
+                            debug!("id after new {}", this_class);
                             if let Ref(objectref) = &return_value {
                                 if let ObjectRef::Object(object) = objectref {
                                     debug!("return {:?}", object);
@@ -505,7 +510,7 @@ impl Vm {
                         }
                     }
                     NEW => {
-                        let classdef = classmanager::get_classdef(&this_class.id);
+                        let classdef = classmanager::get_classdef(this_class);
                         let class_index = &read_u16(&code.opcodes, pc);
                         let class_name_index = classdef.cp_class_ref(class_index);
                         let class_name = classdef.cp_utf8(class_name_index);
@@ -524,7 +529,7 @@ impl Vm {
                         current_frame(stackframes).push(Ref(array));
                     }
                     ANEWARRAY => {
-                        let classdef = classmanager::get_classdef(&this_class.id);
+                        let classdef = classmanager::get_classdef(this_class);
                         let class_index = &read_u16(&code.opcodes, pc);
                         let class_name_index = classdef.cp_class_ref(class_index);
                         let class_name = classdef.cp_utf8(class_name_index);

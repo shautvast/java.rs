@@ -14,10 +14,10 @@ use crate::{class, classmanager};
 use crate::vm::stack::StackFrame;
 use crate::vm::Vm;
 
-pub fn invoke_native(vm: &mut Vm, stackframes: &mut Vec<StackFrame>, class_name: &String, method_name: &str, _args: Vec<Value>) -> Result<Value, Error> {
+pub fn invoke_native(vm: &mut Vm, stackframes: &mut Vec<StackFrame>, class_name: &str, method_name: &str, _args: Vec<Value>) -> Result<Value, Error> {
     debug!("native {}.{}", class_name, method_name);
 
-    match class_name.as_str() {
+    match class_name {
         "java/lang/Class" => java_lang_Class(vm, method_name),
         "java/lang/System" => java_lang_System(vm, method_name),
         "jdk/internal/misc/Unsafe" => jdk_internal_misc_Unsafe(vm, method_name),
