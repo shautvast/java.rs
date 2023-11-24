@@ -98,47 +98,17 @@ impl Stackframe {
                 ACONST_NULL => {
                     self.push(Null);
                 }
-                ICONST_M1 => {
-                    self.push(I32(-1));
+                ICONST(v) => {
+                    self.push(I32(*v as i32));
                 }
-                ICONST_0 => {
-                    self.push(I32(0));
+                LCONST(v) => {
+                    self.push(I64(*v as i64));
                 }
-                ICONST_1 => {
-                    self.push(I32(1));
+                FCONST(v) => {
+                    self.push(F32(*v as f32));
                 }
-                ICONST_2 => {
-                    self.push(I32(2));
-                }
-                ICONST_3 => {
-                    self.push(I32(3));
-                }
-                ICONST_4 => {
-                    self.push(I32(4));
-                }
-                ICONST_5 => {
-                    self.push(I32(5));
-                }
-                LCONST_0 => {
-                    self.push(I64(0));
-                }
-                LCONST_1 => {
-                    self.push(I64(1));
-                }
-                FCONST_0 => {
-                    self.push(F32(0.0));
-                }
-                FCONST_1 => {
-                    self.push(F32(1.0));
-                }
-                FCONST_2 => {
-                    self.push(F32(2.0));
-                }
-                DCONST_0 => {
-                    self.push(F64(0.0));
-                }
-                DCONST_1 => {
-                    self.push(F64(1.0));
+                DCONST(v) => {
+                    self.push(F64(*v as f64));
                 }
                 SIPUSH(si) => {
                     self.push(I32(*si as i32));
@@ -191,18 +161,6 @@ impl Stackframe {
                     // omitting the type checks so far
                     self.push(self.locals[*n as usize].clone());
                 }
-                ILOAD_0 | LLOAD_0 | FLOAD_0 | DLOAD_0 | ALOAD_0 => {
-                    self.push(self.locals[0].clone());
-                }
-                ILOAD_1 | LLOAD_1 | FLOAD_1 | DLOAD_1 | ALOAD_1 => {
-                    self.push(self.locals[1].clone());
-                }
-                ILOAD_2 | LLOAD_2 | FLOAD_2 | DLOAD_2 | ALOAD_2 => {
-                    self.push(self.locals[2].clone());
-                }
-                ILOAD_3 | LLOAD_3 | FLOAD_3 | DLOAD_3 | ALOAD_3 => {
-                    self.push(self.locals[3].clone());
-                }
                 IALOAD | LALOAD | FALOAD | DALOAD | AALOAD | BALOAD | CALOAD | SALOAD => {
                     let index = self.pop();
                     let arrayref = self.pop();
@@ -211,19 +169,6 @@ impl Stackframe {
                 ISTORE(c) | LSTORE(c) | FSTORE(c) | DSTORE(c) | ASTORE(c) => {
                     self.store(*c).unwrap();
                 }
-                ISTORE_0 | LSTORE_0 | DSTORE_0 | ASTORE_0 | FSTORE_0 => {
-                    self.store(0).unwrap();
-                }
-                ISTORE_1 | LSTORE_1 | DSTORE_1 | ASTORE_1 | FSTORE_1 => {
-                    self.store(1).unwrap();
-                }
-                ISTORE_2 | LSTORE_2 | DSTORE_2 | ASTORE_2 | FSTORE_2 => {
-                    self.store(2).unwrap();
-                }
-                ISTORE_3 | LSTORE_3 | DSTORE_3 | ASTORE_3 | FSTORE_3 => {
-                    self.store(3).unwrap();
-                }
-
                 INVOKEVIRTUAL(c) => {
                     if let Some(invocation) =
                         get_signature_for_invoke(&constant_pool, *c)
