@@ -4,10 +4,11 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use crate::classloader::io::read_u16;
+use crate::vm::opcodes::Opcode;
 
 /// This is the class representation when the bytecode had just been loaded.
 
-pub struct ClassDef {
+pub(crate) struct ClassDef {
     pub minor_version: u16,
     pub major_version: u16,
     pub constant_pool: Rc<HashMap<u16, CpEntry>>,
@@ -317,16 +318,17 @@ impl Field {
     }
 }
 
-pub struct Method {
+pub(crate) struct Method {
     pub(crate) constant_pool: Rc<HashMap<u16, CpEntry>>,
     access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
     pub(crate) attributes: HashMap<String, AttributeType>,
+    pub code: Vec<Opcode>,
 }
 
-impl fmt::Debug for Method {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Method {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Method {{access_flags: {}, name_index: {}, descriptor_index: {}, attributes: {:?} }}",
@@ -342,6 +344,7 @@ impl Method {
         name_index: u16,
         descriptor_index: u16,
         attributes: HashMap<String, AttributeType>,
+        code: Vec<Opcode>,
     ) -> Self {
         Method {
             constant_pool,
@@ -349,6 +352,7 @@ impl Method {
             name_index,
             descriptor_index,
             attributes,
+            code,
         }
     }
 

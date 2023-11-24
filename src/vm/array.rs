@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Error};
+use crate::vm::object::ObjectRef::*;
 
-use crate::class::ObjectRef::*;
-use crate::class::Value::{self, *};
+use crate::value::Value;
+use crate::value::Value::*;
 
 
 pub(crate) fn array_load(index: Value, arrayref: Value) -> Result<Value, Error> {

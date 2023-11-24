@@ -1,5 +1,5 @@
 pub mod classloader;
 pub mod classmanager;
-pub mod class;
+mod value;
+mod class;
 pub mod vm;
-pub mod heap;

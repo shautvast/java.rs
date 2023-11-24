@@ -5,92 +5,15 @@ use std::rc::Rc;
 use log::debug;
 use once_cell::sync::Lazy;
 
-use crate::class::{Class, ClassId, ObjectRef, TypeIndex, Value::*, Value};
-use crate::class::Object;
+use crate::class::{Class, ClassId, TypeIndex};
 use crate::classloader;
-use crate::classloader::classdef::{ClassDef, Modifier};
-use crate::classloader::io::PATH_SEPARATOR;
-use crate::vm::Vm;
+use crate::classloader::classdef::{ClassDef, Method, Modifier};
+use crate::vm::object::{Object, ObjectRef};
+use crate::value::Value;
+use crate::value::Value::*;
+use crate::vm::runtime::Vm;
 
-static mut CLASSMANAGER: Lazy<ClassManager> = Lazy::new(|| ClassManager::new());
 static PRIMITIVES: Lazy<Vec<&str>> = Lazy::new(|| vec!["B", "S", "I", "J", "F", "D", "Z", "J", "C"]);
-
-pub fn init() {
-    debug!("classmanager init");
-    unsafe {
-        CLASSMANAGER.classes.clear();
-        CLASSMANAGER.names.clear();
-        CLASSMANAGER.classdefs.clear();
-        CLASSMANAGER.class_objects.clear();
-        CLASSMANAGER.static_class_data.clear();
-    }
-}
-
-pub fn set_classpath(classpath: &str) {
-    unsafe {
-        CLASSMANAGER.set_classpath(classpath);
-    }
-}
-
-pub fn get_class_by_id(id: ClassId) -> Option<&'static Class> {
-    unsafe {
-        CLASSMANAGER.get_class_by_id(&id)
-    }
-}
-
-pub fn classdef_name(id: &ClassId) -> Option<String> {
-    unsafe {
-        CLASSMANAGER.classdef_name(id)
-    }
-}
-
-pub fn get_classid(name: &str) -> ClassId {
-    unsafe {
-        CLASSMANAGER.get_classid(name).clone()
-    }
-}
-
-pub fn get_classdef(id: ClassId) -> &'static ClassDef {
-    unsafe {
-        CLASSMANAGER.get_classdef(&id)
-    }
-}
-
-pub fn load_class_by_name(name: &str) {
-    unsafe {
-        CLASSMANAGER.load_class_by_name(name)
-    }
-}
-
-pub fn get_class_by_name(name: &str) -> Option<&Class> {
-    unsafe {
-        CLASSMANAGER.get_class_by_name(name)
-    }
-}
-
-pub fn add_class(name: &str) -> ClassId {
-    unsafe {
-        CLASSMANAGER.add_class(name)
-    }
-}
-
-pub fn get_static(id: &ClassId, index: usize) -> Value {
-    unsafe {
-        CLASSMANAGER.static_class_data.get(id).unwrap()[index].clone()
-    }
-}
-
-pub fn set_static(id: ClassId, index: usize, value: Value) {
-    unsafe {
-        CLASSMANAGER.static_class_data.get_mut(&id).unwrap()[index] = value;
-    }
-}
-
-pub fn get_classobject(id: ClassId) -> Option<&'static Value> {
-    unsafe {
-        CLASSMANAGER.class_objects.get(&id)
-    }
-}
 
 //TODO less pubs
 pub struct ClassManager {
@@ -101,18 +24,17 @@ pub struct ClassManager {
     classpath: Vec<String>,
 
     //references to classdefs, ie the static class info
-    pub classdefs: HashMap<ClassId, ClassDef>,
+    pub(crate) classdefs: HashMap<ClassId, ClassDef>,
 
     // references to the runtime class
     pub classes: HashMap<ClassId, Class>,
 
     pub names: HashMap<String, ClassId>,
     pub class_objects: HashMap<ClassId, Value>,
-    vm: Vm,
 }
 
 impl ClassManager {
-    pub fn new() -> Self {
+    pub fn new(classpath: Vec<String>) -> Self {
         Self {
             static_class_data: HashMap::new(),
             current_id: 0,
@@ -120,19 +42,23 @@ impl ClassManager {
             classes: HashMap::new(),
             class_objects: HashMap::new(),
             names: HashMap::new(),
-            classpath: vec![],
-            vm: Vm::new_internal(),
+            classpath,
         }
     }
 
-    fn set_classpath(&mut self, classpath: &str) {
-        self.classpath = classpath
-            .split(PATH_SEPARATOR)
-            .map(|s| s.into())
-            .collect();
+    pub fn get_static(&self, id: &ClassId, index: usize) -> Value {
+        self.static_class_data.get(id).unwrap()[index].clone()
     }
 
-    fn get_class_by_id(&mut self, id: &ClassId) -> Option<&Class> {
+    pub fn set_static(&mut self, id: ClassId, index: usize, value: Value) {
+        self.static_class_data.get_mut(&id).unwrap()[index] = value;
+    }
+
+    pub fn get_classobject(&self, id: &ClassId) -> Option<&Value> {
+        self.class_objects.get(id)
+    }
+
+    pub fn get_class_by_id(&mut self, id: &ClassId) -> Option<&Class> {
         if !self.classes.contains_key(id) {
             let name = self.classdef_name(id);
             if name.is_some() {
@@ -142,20 +68,20 @@ impl ClassManager {
         self.classes.get(id)
     }
 
-    fn classdef_name(&self, id: &ClassId) -> Option<String> {
+    pub fn classdef_name(&self, id: &ClassId) -> Option<String> {
         self.classdefs.get(id).map(|c| c.name().to_owned()) //drops borrow to self here
     }
 
-    fn get_classid(&self, name: &str) -> &ClassId {
+    pub fn get_classid(&self, name: &str) -> &ClassId {
         self.names.get(name).unwrap()
     }
 
-    fn get_classdef(&self, id: &ClassId) -> &ClassDef {
+    pub(crate) fn get_classdef(&self, id: &ClassId) -> &ClassDef {
         self.classdefs.get(&id).unwrap()
     }
 
     /// loads the class if not already there
-    fn load_class_by_name(&mut self, name: &str) {
+    pub fn load_class_by_name(&mut self, name: &str) {
         debug!("load class {}", name);
         // determine no of dimensions and get type of array if any
         let mut chars = name.chars();
@@ -170,7 +96,7 @@ impl ClassManager {
         let mut type_name = name[num_dims..name.len()].to_owned();
 
         if num_dims > 0 {
-            if !PRIMITIVES.contains(&type_name.as_str()){
+            if !PRIMITIVES.contains(&type_name.as_str()) {
                 type_name = type_name[1..type_name.len()].to_owned();
             }
             let id = self.get_or_new_id(name);
@@ -196,11 +122,21 @@ impl ClassManager {
         }
     }
 
+    pub(crate) fn get_method(&self, class_name: &str, method_name: &str) -> Option<&Method> {
+        let class_id = self.get_classid(class_name);
+        let classdef = self.get_classdef(class_id);
+        classdef.get_method(method_name)
+    }
+
     /// get optional classid from cache
-    fn get_class_by_name(&self, name: &str) -> Option<&Class> {
+    pub fn get_mut_class_by_name(&mut self, name: &str) -> Option<&mut Class> {
         let id = self.names.get(name);
-        let t = self.classes.get(id.unwrap());
-        t
+        self.classes.get_mut(id.unwrap())
+    }
+
+    pub fn get_class_by_name(&self, name: &str) -> Option<&Class> {
+        let id = self.names.get(name);
+        self.classes.get(id.unwrap())
     }
 
     /// adds the class and calculates the 'offset' of it's fields (static and non-static)
@@ -252,6 +188,7 @@ impl ClassManager {
 
         self.classes.insert(this_classid, Class {
             id: this_classid,
+            initialized: false,
             name: name.into(),
             superclass: superclass_id,
             parents,
@@ -272,7 +209,7 @@ impl ClassManager {
 
         // run static init
         if this_classdef.methods.contains_key("<clinit>()V") {
-            self.vm.execute_special(&mut vec![], name, "<clinit>()V", vec![]).unwrap();
+            Vm { stack: Vec::new()}.run2(self, this_classid,"<clinit>()V");
         }
 
         this_classid
@@ -316,6 +253,7 @@ impl ClassManager {
 
     /// loads the class and returns it's dependencies
     fn load_class_and_deps(&mut self, name: &str) -> (ClassId, Vec<String>) {
+        debug!("load {}", name);
         let id = self.get_or_new_id(name);
 
         let classdef = self.classdefs
@@ -426,7 +364,7 @@ mod test {
         let mut fields_declared_by_java_lang_class = HashMap::new();
         fields_declared_by_java_lang_class.insert("name".to_owned(), TypeIndex { type_name: "java/lang/String".into(), index: 0 });
         class_field_mapping.insert("java/lang/Class".to_owned(), fields_declared_by_java_lang_class);
-        classes.insert(3, Class { id: 3, name: "".into(), superclass: None, parents: LinkedList::new(), interfaces: vec![], object_field_mapping: class_field_mapping, static_field_mapping: HashMap::new() });
+        classes.insert(3, Class { id: 3, initialized: false, name: "".into(), superclass: None, parents: LinkedList::new(), interfaces: vec![], object_field_mapping: class_field_mapping, static_field_mapping: HashMap::new() });
 
         let mut cm = ClassManager {
             static_class_data: HashMap::new(),
@@ -436,7 +374,6 @@ mod test {
             current_id: 1,
             names,
             classpath: Vec::new(),
-            vm: Vm::new(&mut vec![]),
         };
 
         let c_id = cm.add_class("C");

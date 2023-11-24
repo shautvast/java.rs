@@ -9,9 +9,11 @@ use log::debug;
 
 use crate::classloader::io::{find_class, read_bytes, read_f32, read_f64, read_i32, read_i64, read_u16, read_u32, read_u8};
 use crate::classloader::classdef::{AttributeType, ClassDef, CpEntry, Exception, Field, Method, MethodCode};
+use crate::classloader::code_parser::parse_code;
 
 pub mod classdef;
 pub(crate) mod io;
+mod code_parser;
 
 pub(crate) fn get_classdef(classpath: &Vec<String>, class_name: &str) -> Result<ClassDef,Error> {
     debug!("read class {} ", class_name);
@@ -93,6 +95,8 @@ fn load_class(bytecode: Vec<u8>) -> Result<ClassDef, Error> {
             panic!("attribute not found"); // bug/not-implemented
         }
     }
+
+
 
     Ok(ClassDef::new(
         minor_version,
@@ -238,12 +242,20 @@ fn read_method(
         }
     }
 
+    let code =
+    if let Some(AttributeType::Code(code)) = attributes.get("Code") {
+        parse_code(&code.opcodes)
+    } else{
+        vec![]
+    };
+
     Method::new(
         constant_pool,
         access_flags,
         name_index,
         descriptor_index,
         attributes,
+        code
     )
 }
 
