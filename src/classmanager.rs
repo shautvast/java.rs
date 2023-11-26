@@ -99,11 +99,11 @@ impl ClassManager {
             if !PRIMITIVES.contains(&type_name.as_str()) {
                 type_name = type_name[1..type_name.len()].to_owned();
             }
-            let id = self.get_or_new_id(name);
+            let id = self.get_or_new_id(name.into());
             if !self.class_objects.contains_key(&id) {
                 let cls = self.get_class_by_name("java/lang/Class").unwrap();
                 let mut instance = Object::new(cls);
-                instance.set(cls, "java/lang/Class", "name", Value::Utf8(name.into()));
+                instance.set(cls, "java/lang/Class", "name", Utf8(name.into()));
                 let instance = Ref(ObjectRef::Object(Rc::new(RefCell::new(instance))));
 
                 self.class_objects.insert(id, instance);
@@ -135,6 +135,7 @@ impl ClassManager {
     }
 
     pub fn get_class_by_name(&self, name: &str) -> Option<&Class> {
+        debug!("{}", name);
         let id = self.names.get(name);
         self.classes.get(id.unwrap())
     }
@@ -252,18 +253,19 @@ impl ClassManager {
     }
 
     /// loads the class and returns it's dependencies
-    fn load_class_and_deps(&mut self, name: &str) -> (ClassId, Vec<String>) {
-        debug!("load {}", name);
-        let id = self.get_or_new_id(name);
+    fn load_class_and_deps(&mut self, class_name: &str) -> (ClassId, Vec<String>) {
+        debug!("load {}", class_name);
+        let class_name = class_name.to_owned().replace(".", "/");
+        let id = self.get_or_new_id(class_name.clone());
 
         let classdef = self.classdefs
             .entry(id)
-            .or_insert_with(|| classloader::get_classdef(&self.classpath, name).expect("ClassNotFound"));
+            .or_insert_with(|| classloader::get_classdef(&self.classpath, class_name.as_str()).expect("ClassNotFound"));
         (id, inspect_dependencies(classdef))
     }
 
-    fn get_or_new_id(&mut self, name: &str) -> ClassId {
-        let id = *self.names.entry(name.to_string()).or_insert_with(|| {
+    fn get_or_new_id(&mut self, name: String) -> ClassId {
+        let id = *self.names.entry(name).or_insert_with(|| {
             self.current_id += 1;
             self.current_id
         });

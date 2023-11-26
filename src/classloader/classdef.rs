@@ -318,13 +318,13 @@ impl Field {
     }
 }
 
-pub(crate) struct Method {
+pub struct Method {
     pub(crate) constant_pool: Rc<HashMap<u16, CpEntry>>,
-    access_flags: u16,
+    pub access_flags: u16,
     name_index: u16,
     descriptor_index: u16,
     pub(crate) attributes: HashMap<String, AttributeType>,
-    pub code: Vec<Opcode>,
+    pub(crate) code: Vec<Opcode>,
 }
 
 impl Debug for Method {
@@ -338,7 +338,7 @@ impl Debug for Method {
 }
 
 impl Method {
-    pub fn new(
+    pub(crate) fn new(
         constant_pool: Rc<HashMap<u16, CpEntry>>,
         access_flags: u16,
         name_index: u16,

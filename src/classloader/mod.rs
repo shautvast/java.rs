@@ -232,6 +232,7 @@ fn read_method(
 ) -> Method {
     let access_flags = read_u16(bytecode, index);
     let name_index = read_u16(bytecode, index);
+    let name = constant_pool.get(&name_index);
     let descriptor_index = read_u16(bytecode, index);
     let attributes_count = read_u16(bytecode, index);
 

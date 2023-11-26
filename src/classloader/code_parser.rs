@@ -1,15 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap};
 
-use log::debug;
-
-use crate::classloader::io::{read_i32, read_lookupswitch, read_tableswitch, read_u16, read_u8, read_wide_opcode};
+use crate::classloader::io::{read_i16, read_i32, read_lookupswitch, read_tableswitch, read_u16, read_u8, read_wide_opcode};
 use crate::vm::opcodes::Opcode::{self, *};
 
 pub(crate) fn parse_code(opcodes: &[u8]) -> Vec<Opcode> {
-    let mut code: HashMap<u16, (u16, Opcode)> = HashMap::new();
+    let mut code: BTreeMap<u16, (u16, Opcode)> = BTreeMap::new();
     let mut c = 0;
     let mut opcode_index: u16 = 0;
-    // debug!("len {:?}", opcodes.len());
     while c < opcodes.len() {
         let opcode = get_opcode(opcodes, &mut c);
         code.insert(c as u16, (opcode_index, opcode));
@@ -21,13 +18,9 @@ pub(crate) fn parse_code(opcodes: &[u8]) -> Vec<Opcode> {
     code.into_iter().map(|(_, (_, opcode))|
         match opcode {
             IFNULL(goto) => {
-                debug!("goto {:?}", goto);
-                debug!("{:?}", code2);
                 IFNULL(code2.get(&goto).unwrap().0)
             }
             IFNONNULL(goto) => {
-                debug!("goto {:?}", &goto);
-                debug!("{:?}", code2);
                 IFNONNULL(code2.get(&goto).unwrap().0)
             }
             //TODO more jump instructions
@@ -162,6 +155,8 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
         121 => LSHL,
         122 => ISHR,
         123 => LSHR,
+        124 => IUSHR,
+        125 => LUSHR,
         126 => IAND,
         127 => LAND,
         128 => IOR,
@@ -209,6 +204,7 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
         170 => TABLESWITCH(read_tableswitch(opcodes, c)),
         171 => LOOKUPSWITCH(read_lookupswitch(opcodes, c)),
         172 => IRETURN,
+        173 => LRETURN,
         174 => FRETURN,
         175 => DRETURN,
         176 => ARETURN,
@@ -243,14 +239,12 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
         196 => WIDE(Box::new(read_wide_opcode(opcodes, c))),
         197 => MULTIANEWARRAY(read_u16(opcodes, c), read_u8(opcodes, c)),
         198 => {
-            let j = read_u16(opcodes, c);
-            debug!("ifnull {}",*c as u16 + j - 3);
-            IFNULL(*c as u16 + j - 3)
+            let j = read_i16(opcodes, c);
+            IFNULL((*c as i16 + j - 3) as u16)
         }
         199 => {
-            let j = read_u16(opcodes, c);
-            debug!("ifnonnull {} ", *c as u16 + j - 3);
-            IFNONNULL(*c as u16 + j - 3)
+            let j = read_i16(opcodes, c);
+            IFNONNULL((*c as i16 + j - 3) as u16)
         }
         200 => GOTOW(read_i32(opcodes, c)),
         201 => JSR_W(read_i32(opcodes, c)),
@@ -258,5 +252,6 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
 
         _ => panic!("{}", opcode_u8),
     };
+
     opcode
 }

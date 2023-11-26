@@ -6,7 +6,7 @@ use anyhow::Error;
 use log::debug;
 
 use crate::class::ClassId;
-use crate::classloader::classdef::CpEntry;
+use crate::classloader::classdef::{CpEntry, Modifier};
 use crate::classloader::io::PATH_SEPARATOR;
 use crate::classmanager::ClassManager;
 use crate::value::Value::{self, *};
@@ -17,6 +17,8 @@ use crate::vm::object::ObjectRef::Object;
 use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
 use std::io::Write;
+use crate::vm::native::invoke_native;
+
 pub struct Vm {
     pub stack: Vec<Stackframe>,
 }
@@ -33,23 +35,26 @@ impl Vm {
         }
     }
 
-    pub fn run(self, classpath: &str, class_name: &str, method_name: &str) {
-
+    pub fn run(mut self, classpath: &str, class_name: &str, method_name: &str) {
         let classpath = classpath.split(PATH_SEPARATOR).map(|s| s.into())
             .collect();
         let mut class_manager = ClassManager::new(classpath);
 
         class_manager.load_class_by_name("java/lang/Class");
+        class_manager.load_class_by_name("java/lang/System");
         class_manager.load_class_by_name("java/lang/String");
         class_manager.load_class_by_name("java/util/Collections");
 
+
         class_manager.load_class_by_name(class_name);
-        let class_id = *class_manager.get_classid(class_name);
-        self.run2(&mut class_manager, class_id, method_name);
+        let system_id = *class_manager.get_classid("java/lang/System");
+        self.run2(&mut class_manager, system_id, "initPhase1()V");
+        // let class_id = *class_manager.get_classid(class_name);
+        // self.run2(&mut class_manager, class_id, method_name);
     }
 
-    pub(crate) fn run2(self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) {
-        Stackframe::new().run(class_manager, class_id, method_name);
+    pub(crate) fn run2(&mut self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) {
+        Stackframe::default().run(class_manager, class_id, method_name);
     }
 }
 
@@ -60,10 +65,10 @@ pub struct Stackframe {
 }
 
 impl Stackframe {
-    pub fn new() -> Self {
+    pub fn new(args: Vec<Value>) -> Self {
         Self {
             pc: 0,
-            locals: vec![],
+            locals: args,
             stack: vec![],
         }
     }
@@ -84,15 +89,16 @@ impl Stackframe {
         self.stack.pop().unwrap()
     }
 
-    pub fn run(&mut self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) {
+    pub fn run(&mut self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) -> Value {
         let classname = class_manager.get_class_by_id(&class_id).unwrap().name.to_owned();
+
         let code = class_manager.get_classdef(&class_id).get_method(method_name).unwrap().code.clone();
         let constant_pool = class_manager.get_classdef(&class_id).get_method(method_name).unwrap().constant_pool.clone();
 
         let len = code.len();
         while self.pc < len {
             let opcode: &Opcode = code.get(self.pc).unwrap();
-            debug!("\tat {}.{}: {} #{:?}  {:?}", classname, method_name, self.pc, opcode, self.stack);
+            debug!("\tat {}.{}: {} #{:?} - {:?}", classname, method_name, self.pc, opcode, self.stack);
             match opcode {
                 NOP => {}
                 ACONST_NULL => {
@@ -173,11 +179,22 @@ impl Stackframe {
                     if let Some(invocation) =
                         get_signature_for_invoke(&constant_pool, *c)
                     {
-                        // debug!("invoke {:?}", invocation);
+                        let mut args = Vec::with_capacity(invocation.method.num_args);
+                        for _ in 0..invocation.method.num_args {
+                            args.insert(0, self.pop().clone());
+                        }
+                        let this_ref = self.pop();
+                        args.insert(0, this_ref.clone());
+
+
+                        debug!("invoke {:?}", invocation);
                         let mut invoke_class: Option<ClassId> = None;
-                        if let Ref(this) = &self.locals[0] {
+                        if let Null = this_ref {
+                            panic!("NullPointer Exception");
+                        }
+                        if let Ref(this) = this_ref {
                             if let Object(this) = this {
-                                let invoke_classdef = class_manager.get_classdef(&class_id);
+                                let invoke_classdef = class_manager.get_classdef(&this.borrow().class_id);
                                 let invoke_method = invoke_classdef.get_method(&invocation.method.name);
                                 if invoke_method.is_some() {
                                     class_manager.load_class_by_name(&invocation.class_name);
@@ -204,20 +221,21 @@ impl Stackframe {
                             }
                         }
                         if invoke_class.is_none() {
-                            panic!();
+                            panic!("method {:?}.{} not found", invocation.class_name, invocation.method.name);
                         }
-                        let mut args = Vec::with_capacity(invocation.method.num_args);
-                        for _ in 0..invocation.method.num_args {
-                            args.insert(0, self.pop().clone());
-                        }
-                        args.insert(0, self.pop());
 
-                        let mut new_stackframe = Stackframe {
-                            pc: 0,
-                            locals: args,
-                            stack: vec![],
-                        };
-                        new_stackframe.run(class_manager, invoke_class.unwrap(), &invocation.method.name);
+                        let return_value =
+                            if class_manager.get_classdef(&invoke_class.unwrap()).get_method(&invocation.method.name).unwrap().is(Modifier::Native) {
+                                invoke_native(class_manager, invocation.class_name.as_str(), invocation.method.name.as_str(), args).unwrap()
+                                // TODO remove unwrap in line above, error handling
+                            } else {
+                                let mut new_stackframe = Stackframe::new(args);
+                                new_stackframe.run(class_manager, invoke_class.unwrap(), &invocation.method.name)
+                            };
+                        match return_value {
+                            Void => {}
+                            _ => self.push(return_value)
+                        }
                     } else {
                         unreachable!()
                     }
@@ -226,17 +244,31 @@ impl Stackframe {
                     if let Some(invocation) =
                         get_signature_for_invoke(&constant_pool, *c)
                     {
+                        debug!("invoke {:?}", invocation);
                         let mut args = Vec::with_capacity(invocation.method.num_args);
                         for _ in 0..invocation.method.num_args {
                             args.insert(0, self.pop().clone());
                         }
-                        let mut new_stackframe = Stackframe {
-                            pc: 0,
-                            locals: args,
-                            stack: vec![],
-                        };
+                        if let INVOKESPECIAL(_) = opcode {
+                            args.insert(0, self.pop());
+                        }
+
+                        class_manager.load_class_by_name(invocation.class_name.as_str());
                         let invoke_class = class_manager.get_classid(invocation.class_name.as_str());
-                        new_stackframe.run(class_manager, *invoke_class, &invocation.method.name);
+
+                        let return_value =
+                            if class_manager.get_classdef(&invoke_class).get_method(&invocation.method.name).unwrap().is(Modifier::Native) {
+                                invoke_native(class_manager, invocation.class_name.as_str(), invocation.method.name.as_str(), args).unwrap()
+                                // TODO remove unwrap in line above, error handling
+                            } else {
+                                let mut new_stackframe = Stackframe::new(args);
+                                new_stackframe.run(class_manager, *invoke_class, &invocation.method.name)
+                            };
+                        debug!("returning {:?}", return_value);
+                        match return_value {
+                            Void => {}
+                            _ => self.push(return_value)
+                        }
                     } else {
                         unreachable!()
                     }
@@ -369,9 +401,22 @@ impl Stackframe {
                         _ => if let IFNONNULL(goto) = opcode { self.pc = *goto as usize; }
                     };
                 }
+                DUP => {
+                    let value = self.pop();
+                    self.push(value.clone());
+                    self.push(value.clone());
+                }
+                IRETURN | LRETURN | FRETURN | DRETURN | ARETURN => {
+                    return self.pop();
+                }
+                RETURN_VOID => {
+                    return Void;
+                }
                 _ => { panic!("opcode not implemented") }
             }
+            self.pc += 1;
         }
+        Void
     }
 
     fn store(

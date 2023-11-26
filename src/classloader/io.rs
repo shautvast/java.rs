@@ -17,7 +17,6 @@ pub const PATH_SEPARATOR: char = ';';
 /// * [jar/zip]#[package_path]/[class].class
 /// * [dir]/[package_path]/[class].class
 pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, Error> {
-    let class_name = &class_name.to_owned().replace(".", "/");
     if class_name.starts_with("java")
         || class_name.starts_with("sun/")
         || class_name.starts_with("com/sun/")
@@ -73,6 +72,15 @@ pub(crate) fn read_u16(data: &[u8], pos: &mut usize) -> u16 {
     )
 }
 
+pub(crate) fn read_i16(data: &[u8], pos: &mut usize) -> i16 {
+    *pos += 2;
+    i16::from_be_bytes(
+        data[*pos - 2..*pos]
+            .try_into()
+            .expect("slice with incorrect length"),
+    )
+}
+
 pub(crate) fn read_i32(data: &[u8], pos: &mut usize) -> i32 {
     *pos += 4;
     i32::from_be_bytes(
@@ -119,8 +127,9 @@ pub(crate) fn read_f64(data: &[u8], pos: &mut usize) -> f64 {
 }
 
 pub(crate) fn read_tableswitch(data: &[u8], pos: &mut usize) -> Tableswitch {
-    while read_u8(data, pos) == 0 {}
-    *pos -= 1;
+    while *pos % 4 != 0 {
+        *pos += 1;
+    }
     let default = read_i32(data, pos);
     let low = read_i32(data, pos);
     let high = read_i32(data, pos);
@@ -132,8 +141,9 @@ pub(crate) fn read_tableswitch(data: &[u8], pos: &mut usize) -> Tableswitch {
 }
 
 pub(crate) fn read_lookupswitch(data: &[u8], pos: &mut usize) -> Lookupswitch {
-    while read_u8(data, pos) == 0 {}
-    *pos -= 1;
+    while *pos % 4 != 0 {
+        *pos += 1;
+    }
     let default = read_i32(data, pos);
     let npairs = read_i32(data, pos);
     let mut match_offset_pairs = vec![];
