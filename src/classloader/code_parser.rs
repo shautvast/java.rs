@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap};
+use log::debug;
 
 use crate::classloader::io::{read_i16, read_i32, read_lookupswitch, read_tableswitch, read_u16, read_u8, read_wide_opcode};
 use crate::vm::opcodes::Opcode::{self, *};
@@ -7,14 +8,17 @@ pub(crate) fn parse_code(opcodes: &[u8]) -> Vec<Opcode> {
     let mut code: BTreeMap<u16, (u16, Opcode)> = BTreeMap::new();
     let mut c = 0;
     let mut opcode_index: u16 = 0;
+    let mut index_before_read: u16;
     while c < opcodes.len() {
+        index_before_read = c as u16;
         let opcode = get_opcode(opcodes, &mut c);
-        code.insert(c as u16, (opcode_index, opcode));
+        code.insert(index_before_read, (opcode_index, opcode));
         opcode_index += 1;
     }
     let code2 = code.clone(); //clone to look up
 
     // for jumps, map index of opcode as u8 to index of opcode as enum
+    debug!("{:?}", code);
     code.into_iter().map(|(_, (_, opcode))|
         match opcode {
             IFNULL(goto) => {
@@ -23,6 +27,44 @@ pub(crate) fn parse_code(opcodes: &[u8]) -> Vec<Opcode> {
             IFNONNULL(goto) => {
                 IFNONNULL(code2.get(&goto).unwrap().0)
             }
+
+            IF_ICMPEQ(goto) => {
+                IF_ICMPEQ(code2.get(&goto).unwrap().0)
+            }
+            IF_ICMPNE(goto) => {
+                IF_ICMPNE(code2.get(&goto).unwrap().0)
+            }
+            IF_ICMPGT(goto) => {
+                IF_ICMPGT(code2.get(&goto).unwrap().0)
+            }
+            IF_ICMPGE(goto) => {
+                IF_ICMPGE(code2.get(&goto).unwrap().0)
+            }
+            IF_ICMPLT(goto) => {
+                IF_ICMPLT(code2.get(&goto).unwrap().0)
+            }
+            IF_ICMPLE(goto) => {
+                IF_ICMPLE(code2.get(&goto).unwrap().0)
+            }
+            IFEQ(goto) => {
+                IFEQ(code2.get(&goto).unwrap().0)
+            }
+            IFNE(goto) => {
+                IFNE(code2.get(&goto).unwrap().0)
+            }
+            IFGT(goto) => {
+                IFGT(code2.get(&goto).unwrap().0)
+            }
+            IFGE(goto) => {
+                IFGE(code2.get(&goto).unwrap().0)
+            }
+            IFLT(goto) => {
+                IFLT(code2.get(&goto).unwrap().0)
+            }
+            IFLE(goto) => {
+                IFLE(code2.get(&goto).unwrap().0)
+            }
+
             //TODO more jump instructions
             _ => opcode
         }
@@ -184,20 +226,20 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
         150 => FCMPG,
         151 => DCMPL,
         152 => DCMPG,
-        153 => IFEQ(read_u16(opcodes, c)),
-        154 => IFNE(read_u16(opcodes, c)),
-        155 => IFLT(read_u16(opcodes, c)),
-        156 => IFGE(read_u16(opcodes, c)),
-        157 => IFGT(read_u16(opcodes, c)),
-        158 => IFLE(read_u16(opcodes, c)),
-        159 => IF_ICMPEQ(read_u16(opcodes, c)),
-        160 => IF_ICMPNE(read_u16(opcodes, c)),
-        161 => IF_ICMPLT(read_u16(opcodes, c)),
-        162 => IF_ICMPGE(read_u16(opcodes, c)),
-        163 => IF_ICMPGT(read_u16(opcodes, c)),
-        164 => IF_ICMPLE(read_u16(opcodes, c)),
-        165 => IF_ACMPEQ(read_u16(opcodes, c)),
-        166 => IF_ACMPNE(read_u16(opcodes, c)),
+        153 => IFEQ(offset(opcodes, c)),
+        154 => IFNE(offset(opcodes, c)),
+        155 => IFLT(offset(opcodes, c)),
+        156 => IFGE(offset(opcodes, c)),
+        157 => IFGT(offset(opcodes, c)),
+        158 => IFLE(offset(opcodes, c)),
+        159 => IF_ICMPEQ(offset(opcodes, c)),
+        160 => IF_ICMPNE(offset(opcodes, c)),
+        161 => IF_ICMPLT(offset(opcodes, c)),
+        162 => IF_ICMPGE(offset(opcodes, c)),
+        163 => IF_ICMPGT(offset(opcodes, c)),
+        164 => IF_ICMPLE(offset(opcodes, c)),
+        165 => IF_ACMPEQ(offset(opcodes, c)),
+        166 => IF_ACMPNE(offset(opcodes, c)),
         167 => GOTO(read_u16(opcodes, c)),
         168 => JSR(read_u16(opcodes, c)),
         169 => RET(read_u8(opcodes, c)),
@@ -239,19 +281,22 @@ fn get_opcode(opcodes: &[u8], c: &mut usize) -> Opcode {
         196 => WIDE(Box::new(read_wide_opcode(opcodes, c))),
         197 => MULTIANEWARRAY(read_u16(opcodes, c), read_u8(opcodes, c)),
         198 => {
-            let j = read_i16(opcodes, c);
-            IFNULL((*c as i16 + j - 3) as u16)
+            IFNULL(offset(opcodes, c))
         }
         199 => {
-            let j = read_i16(opcodes, c);
-            IFNONNULL((*c as i16 + j - 3) as u16)
+            IFNONNULL(offset(opcodes, c))
         }
         200 => GOTOW(read_i32(opcodes, c)),
         201 => JSR_W(read_i32(opcodes, c)),
 
-
         _ => panic!("{}", opcode_u8),
     };
-
+    debug!("{}: {:?}", c, opcode);
     opcode
+}
+
+fn offset(opcodes: &[u8], c: &mut usize) -> u16 {
+    let j = read_i16(opcodes, c);
+    debug!("JUMP TO {} + {}",c, j);
+    (*c as i16 + j - 3) as u16
 }

@@ -10,7 +10,7 @@ use crate::classloader::classdef::{CpEntry, Modifier};
 use crate::classloader::io::PATH_SEPARATOR;
 use crate::classmanager::ClassManager;
 use crate::value::Value::{self, *};
-use crate::vm::array::array_load;
+use crate::vm::array::{array_load, array_store};
 use crate::vm::object;
 use crate::vm::object::ObjectRef;
 use crate::vm::object::ObjectRef::Object;
@@ -18,6 +18,8 @@ use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
 use std::io::Write;
 use crate::vm::native::invoke_native;
+
+const MASK_LOWER_5BITS: i32 = 0b00011111;
 
 pub struct Vm {
     pub stack: Vec<Stackframe>,
@@ -99,6 +101,7 @@ impl Stackframe {
         while self.pc < len {
             let opcode: &Opcode = code.get(self.pc).unwrap();
             debug!("\tat {}.{}: {} #{:?} - {:?}", classname, method_name, self.pc, opcode, self.stack);
+            self.pc += 1;
             match opcode {
                 NOP => {}
                 ACONST_NULL => {
@@ -174,6 +177,64 @@ impl Stackframe {
                 }
                 ISTORE(c) | LSTORE(c) | FSTORE(c) | DSTORE(c) | ASTORE(c) => {
                     self.store(*c).unwrap();
+                }
+                BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
+                | AASTORE => {
+                    let value = self.pop();
+                    let index = self.pop();
+                    let arrayref = self.pop();
+                    array_store(value, index, arrayref).unwrap()//TODO
+                }
+                POP => {
+                    self.pop();
+                }
+                DUP => {
+                    let value = self.pop();
+                    self.push(value.clone());
+                    self.push(value);
+                }
+                IADD => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    debug!("{:?}+{:?}", value1, value2);
+                    self.push(I32(value1.into_i32() + value2.into_i32()));
+                }
+                ISUB => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(I32(value1.into_i32() - value2.into_i32()));
+                }
+                IDIV => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    self.push(I32(value1.into_i32() / value2.into_i32()));
+                }
+                ISHL => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    debug!("{:?} shl {:?}", value1, value2);
+                    self.push(I32(value1.into_i32() << (value2.into_i32() & MASK_LOWER_5BITS)));
+                }
+                ISHR => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    debug!("{:?} shr {:?}", value1, value2);
+                    self.push(I32(value1.into_i32() >> (value2.into_i32() & MASK_LOWER_5BITS)));
+                }
+                IFEQ(jmp_to) | IFNE(jmp_to) | IFLT(jmp_to) | IFGE(jmp_to) | IFGT(jmp_to) | IFLE(jmp_to) => {
+                    let value = self.pop();
+                    if_cmp(&mut self.pc, opcode, jmp_to, &value, &I32(0));
+                }
+
+                IF_ICMPEQ(jmp_to) | IF_ICMPNE(jmp_to) | IF_ICMPGT(jmp_to) | IF_ICMPGE(jmp_to) | IF_ICMPLT(jmp_to) | IF_ICMPLE(jmp_to) => {
+                    let value1 = self.pop();
+                    let value2 = self.pop();
+                    if_cmp(&mut self.pc, opcode, jmp_to, &value1, &value2);
+                }
+                GOTO(jmp_to) => {
+                    self.pc += *jmp_to as usize;
+                    // debug!("GOTO {}", *pc)
                 }
                 INVOKEVIRTUAL(c) => {
                     if let Some(invocation) =
@@ -391,6 +452,10 @@ impl Stackframe {
                         unreachable!("array length {:?}", val);
                     }
                 }
+                ATHROW => {
+                    let value = self.pop();
+                    panic!("{:?}", value);
+                }
                 MONITORENTER | MONITOREXIT => {
                     self.pop();
                 } //TODO implement
@@ -414,7 +479,6 @@ impl Stackframe {
                 }
                 _ => { panic!("opcode not implemented") }
             }
-            self.pc += 1;
         }
         Void
     }
@@ -463,6 +527,28 @@ pub(crate) fn get_name_and_type(cp: &HashMap<u16, CpEntry>, index: u16) -> Optio
         }
     }
     None
+}
+
+fn if_cmp(pc: &mut usize, opcode: &Opcode, jmp_to: &u16, value1: &Value, value2: &Value) {
+    if let I32(value1) = value1 {
+        if let I32(value2) = value2 {
+            let jump = match opcode {
+                IF_ICMPEQ(_) | IFEQ(_) => value1 == value2,
+                IF_ICMPNE(_) | IFNE(_) => value1 != value2,
+                IF_ICMPGT(_) | IFGT(_) => value1 > value2,
+                IF_ICMPGE(_) | IFGE(_) => value1 >= value2,
+                IF_ICMPLT(_) | IFLT(_) => value1 < value2,
+                IF_ICMPLE(_) | IFLE(_) => value1 <= value2,
+                _ => false,
+            };
+            if jump {
+                debug!("\t\tIF({}) JMP {}", jump, *jmp_to as usize);
+                *pc = *jmp_to as usize;
+            } else {
+                debug!("\t\tIF({}) NO JMP", jump);
+            }
+        }
+    }
 }
 
 fn get_num_args(signature: &str) -> usize {
