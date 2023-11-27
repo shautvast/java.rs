@@ -7,15 +7,19 @@ use std::rc::Rc;
 use anyhow::Error;
 use log::debug;
 
-use crate::classloader::io::{find_class, read_bytes, read_f32, read_f64, read_i32, read_i64, read_u16, read_u32, read_u8};
-use crate::classloader::classdef::{AttributeType, ClassDef, CpEntry, Exception, Field, Method, MethodCode};
+use crate::classloader::classdef::{
+    AttributeType, ClassDef, CpEntry, Exception, Field, Method, MethodCode,
+};
 use crate::classloader::code_parser::parse_code;
+use crate::classloader::io::{
+    find_class, read_bytes, read_f32, read_f64, read_i32, read_i64, read_u16, read_u32, read_u8,
+};
 
 pub mod classdef;
-pub(crate) mod io;
 mod code_parser;
+pub(crate) mod io;
 
-pub(crate) fn get_classdef(classpath: &Vec<String>, class_name: &str) -> Result<ClassDef,Error> {
+pub(crate) fn get_classdef(classpath: &Vec<String>, class_name: &str) -> Result<ClassDef, Error> {
     debug!("read class {} ", class_name);
     let resolved_path = find_class(classpath, class_name)?;
     let bytecode = read_bytecode(resolved_path)?;
@@ -64,7 +68,11 @@ fn load_class(bytecode: Vec<u8>) -> Result<ClassDef, Error> {
     let access_flags = read_u16(&bytecode, pos);
     let this_class = read_u16(&bytecode, pos);
     let super_class = read_u16(&bytecode, pos);
-    let super_class = if super_class != 0 { Some(super_class) } else { None };
+    let super_class = if super_class != 0 {
+        Some(super_class)
+    } else {
+        None
+    };
     let interfaces_count = read_u16(&bytecode, pos);
     let mut interfaces = vec![];
     for _ in 0..interfaces_count {
@@ -95,8 +103,6 @@ fn load_class(bytecode: Vec<u8>) -> Result<ClassDef, Error> {
             panic!("attribute not found"); // bug/not-implemented
         }
     }
-
-
 
     Ok(ClassDef::new(
         minor_version,
@@ -243,10 +249,9 @@ fn read_method(
         }
     }
 
-    let code =
-    if let Some(AttributeType::Code(code)) = attributes.get("Code") {
+    let code = if let Some(AttributeType::Code(code)) = attributes.get("Code") {
         parse_code(&code.opcodes)
-    } else{
+    } else {
         vec![]
     };
 
@@ -256,7 +261,7 @@ fn read_method(
         name_index,
         descriptor_index,
         attributes,
-        code
+        code,
     )
 }
 
@@ -319,12 +324,11 @@ fn read_attribute(
             "InnerClasses" => Some(("".into(), AttributeType::InnerClasses)),       //stub
             "Signature" => Some(("".into(), AttributeType::Signature)),             //stub
             "NestHost" => Some(("".into(), AttributeType::NestHost)),               //stub
-            "EnclosingMethod" => Some(("".into(), AttributeType::EnclosingMethod)),               //stub
-            "PermittedSubclasses" => Some(("".into(), AttributeType::PermittedSubclasses)),               //stub
+            "EnclosingMethod" => Some(("".into(), AttributeType::EnclosingMethod)), //stub
+            "PermittedSubclasses" => Some(("".into(), AttributeType::PermittedSubclasses)), //stub
             //TODO more actual attribute implementations
             _ => None,
         };
     }
     None
 }
-

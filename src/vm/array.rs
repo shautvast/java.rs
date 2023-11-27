@@ -1,9 +1,8 @@
-use anyhow::{anyhow, Error};
 use crate::vm::object::ObjectRef::*;
+use anyhow::{anyhow, Error};
 
 use crate::value::Value;
 use crate::value::Value::*;
-
 
 pub(crate) fn array_load(index: Value, arrayref: Value) -> Result<Value, Error> {
     if let I32(index) = index {
@@ -100,7 +99,7 @@ pub(crate) fn array_store(value: Value, index: Value, arrayref: Value) -> Result
                     } else {
                         unreachable!()
                     }
-                }
+                },
                 LongArray(ref mut array) => {
                     if let I64(value) = value {
                         array[index as usize] = value;

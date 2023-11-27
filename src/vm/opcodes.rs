@@ -93,14 +93,14 @@ pub(crate) enum Opcode {
     LOR,
     IXOR,
     LXOR,
-    IINC(u8,u8),
+    IINC(u8, u8),
     I2L,
     I2F,
     I2D,
     L2I,
     L2F,
     L2D,
-    WIDE_IINC(u16,u16),
+    WIDE_IINC(u16, u16),
     F2I,
     F2L,
     F2D,
@@ -165,7 +165,4 @@ pub(crate) enum Opcode {
     IFNONNULL(u16),
     GOTOW(i32),
     JSR_W(i32),
-
 }
-
-

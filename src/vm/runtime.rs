@@ -11,13 +11,13 @@ use crate::classloader::io::PATH_SEPARATOR;
 use crate::classmanager::ClassManager;
 use crate::value::Value::{self, *};
 use crate::vm::array::{array_load, array_store};
+use crate::vm::native::invoke_native;
 use crate::vm::object;
 use crate::vm::object::ObjectRef;
 use crate::vm::object::ObjectRef::Object;
 use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
 use std::io::Write;
-use crate::vm::native::invoke_native;
 
 const MASK_LOWER_5BITS: i32 = 0b00011111;
 
@@ -28,25 +28,20 @@ pub struct Vm {
 impl Vm {
     pub fn new() -> Self {
         env_logger::builder()
-            .format(|buf, record| {
-                writeln!(buf, "{}: {}", record.level(), record.args())
-            })
-            .try_init().unwrap();
-        Self {
-            stack: vec![]
-        }
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init()
+            .unwrap();
+        Self { stack: vec![] }
     }
 
     pub fn run(mut self, classpath: &str, class_name: &str, method_name: &str) {
-        let classpath = classpath.split(PATH_SEPARATOR).map(|s| s.into())
-            .collect();
+        let classpath = classpath.split(PATH_SEPARATOR).map(|s| s.into()).collect();
         let mut class_manager = ClassManager::new(classpath);
 
         class_manager.load_class_by_name("java/lang/Class");
         class_manager.load_class_by_name("java/lang/System");
         class_manager.load_class_by_name("java/lang/String");
         class_manager.load_class_by_name("java/util/Collections");
-
 
         class_manager.load_class_by_name(class_name);
         let system_id = *class_manager.get_classid("java/lang/System");
@@ -55,7 +50,12 @@ impl Vm {
         // self.run2(&mut class_manager, class_id, method_name);
     }
 
-    pub(crate) fn run2(&mut self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) {
+    pub(crate) fn run2(
+        &mut self,
+        class_manager: &mut ClassManager,
+        class_id: ClassId,
+        method_name: &str,
+    ) {
         Stackframe::default().run(class_manager, class_id, method_name);
     }
 }
@@ -91,16 +91,38 @@ impl Stackframe {
         self.stack.pop().unwrap()
     }
 
-    pub fn run(&mut self, class_manager: &mut ClassManager, class_id: ClassId, method_name: &str) -> Value {
-        let classname = class_manager.get_class_by_id(&class_id).unwrap().name.to_owned();
+    pub fn run(
+        &mut self,
+        class_manager: &mut ClassManager,
+        class_id: ClassId,
+        method_name: &str,
+    ) -> Value {
+        let classname = class_manager
+            .get_class_by_id(&class_id)
+            .unwrap()
+            .name
+            .to_owned();
 
-        let code = class_manager.get_classdef(&class_id).get_method(method_name).unwrap().code.clone();
-        let constant_pool = class_manager.get_classdef(&class_id).get_method(method_name).unwrap().constant_pool.clone();
+        let code = class_manager
+            .get_classdef(&class_id)
+            .get_method(method_name)
+            .unwrap()
+            .code
+            .clone();
+        let constant_pool = class_manager
+            .get_classdef(&class_id)
+            .get_method(method_name)
+            .unwrap()
+            .constant_pool
+            .clone();
 
         let len = code.len();
         while self.pc < len {
             let opcode: &Opcode = code.get(self.pc).unwrap();
-            debug!("\tat {}.{}: {} #{:?} - {:?}", classname, method_name, self.pc, opcode, self.stack);
+            debug!(
+                "\tat {}.{}: {} #{:?} - {:?}",
+                classname, method_name, self.pc, opcode, self.stack
+            );
             self.pc += 1;
             match opcode {
                 NOP => {}
@@ -142,9 +164,15 @@ impl Stackframe {
                             let string = class_manager.get_classdef(&class_id).cp_utf8(&utf8);
                             let string: Vec<u8> = string.as_bytes().into();
                             class_manager.load_class_by_name("java/lang/String");
-                            let stringclass = class_manager.get_class_by_name("java/lang/String").unwrap();
+                            let stringclass =
+                                class_manager.get_class_by_name("java/lang/String").unwrap();
                             let mut stringinstance = object::Object::new(stringclass);
-                            stringinstance.set(stringclass, "java/lang/String", "value", Ref(ObjectRef::new_byte_array(string)));
+                            stringinstance.set(
+                                stringclass,
+                                "java/lang/String",
+                                "value",
+                                Ref(ObjectRef::new_byte_array(string)),
+                            );
 
                             self.push(Ref(Object(Rc::new(RefCell::new(stringinstance)))));
                         }
@@ -152,7 +180,10 @@ impl Stackframe {
                             self.push(I64(*l));
                         }
                         CpEntry::ClassRef(utf8_index) => {
-                            let class_name = class_manager.get_classdef(&class_id).cp_utf8(&utf8_index).to_owned();
+                            let class_name = class_manager
+                                .get_classdef(&class_id)
+                                .cp_utf8(&utf8_index)
+                                .to_owned();
                             class_manager.load_class_by_name(&class_name);
                             let klass_id = class_manager.get_classid(&class_name);
                             if let Some(class) = class_manager.get_classobject(klass_id) {
@@ -178,12 +209,11 @@ impl Stackframe {
                 ISTORE(c) | LSTORE(c) | FSTORE(c) | DSTORE(c) | ASTORE(c) => {
                     self.store(*c).unwrap();
                 }
-                BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE
-                | AASTORE => {
+                BASTORE | IASTORE | LASTORE | CASTORE | SASTORE | FASTORE | DASTORE | AASTORE => {
                     let value = self.pop();
                     let index = self.pop();
                     let arrayref = self.pop();
-                    array_store(value, index, arrayref).unwrap()//TODO
+                    array_store(value, index, arrayref).unwrap() //TODO
                 }
                 POP => {
                     self.pop();
@@ -214,20 +244,39 @@ impl Stackframe {
                     let value2 = self.pop();
                     let value1 = self.pop();
                     debug!("{:?} shl {:?}", value1, value2);
-                    self.push(I32(value1.into_i32() << (value2.into_i32() & MASK_LOWER_5BITS)));
+                    self.push(I32(
+                        value1.into_i32() << (value2.into_i32() & MASK_LOWER_5BITS)
+                    ));
                 }
                 ISHR => {
                     let value2 = self.pop();
                     let value1 = self.pop();
                     debug!("{:?} shr {:?}", value1, value2);
-                    self.push(I32(value1.into_i32() >> (value2.into_i32() & MASK_LOWER_5BITS)));
+                    self.push(I32(
+                        value1.into_i32() >> (value2.into_i32() & MASK_LOWER_5BITS)
+                    ));
                 }
-                IFEQ(jmp_to) | IFNE(jmp_to) | IFLT(jmp_to) | IFGE(jmp_to) | IFGT(jmp_to) | IFLE(jmp_to) => {
+                FCMPG | FCMPL => {
+                    let value2 = self.pop().into_f32();
+                    let value1 = self.pop().into_f32();
+                    if value1 == value2 {
+                        self.push(I32(0))
+                    } else if value1 < value2 {
+                        self.push(I32(-1))
+                    } else if value1 > value2 {
+                        self.push(I32(1))
+                    }
+                    //TODO something with NaN
+                }
+
+                IFEQ(jmp_to) | IFNE(jmp_to) | IFLT(jmp_to) | IFGE(jmp_to) | IFGT(jmp_to)
+                | IFLE(jmp_to) => {
                     let value = self.pop();
                     if_cmp(&mut self.pc, opcode, jmp_to, &value, &I32(0));
                 }
 
-                IF_ICMPEQ(jmp_to) | IF_ICMPNE(jmp_to) | IF_ICMPGT(jmp_to) | IF_ICMPGE(jmp_to) | IF_ICMPLT(jmp_to) | IF_ICMPLE(jmp_to) => {
+                IF_ICMPEQ(jmp_to) | IF_ICMPNE(jmp_to) | IF_ICMPGT(jmp_to) | IF_ICMPGE(jmp_to)
+                | IF_ICMPLT(jmp_to) | IF_ICMPLE(jmp_to) => {
                     let value1 = self.pop();
                     let value2 = self.pop();
                     if_cmp(&mut self.pc, opcode, jmp_to, &value1, &value2);
@@ -237,16 +286,13 @@ impl Stackframe {
                     // debug!("GOTO {}", *pc)
                 }
                 INVOKEVIRTUAL(c) => {
-                    if let Some(invocation) =
-                        get_signature_for_invoke(&constant_pool, *c)
-                    {
+                    if let Some(invocation) = get_signature_for_invoke(&constant_pool, *c) {
                         let mut args = Vec::with_capacity(invocation.method.num_args);
                         for _ in 0..invocation.method.num_args {
                             args.insert(0, self.pop().clone());
                         }
                         let this_ref = self.pop();
                         args.insert(0, this_ref.clone());
-
 
                         debug!("invoke {:?}", invocation);
                         let mut invoke_class: Option<ClassId> = None;
@@ -255,11 +301,14 @@ impl Stackframe {
                         }
                         if let Ref(this) = this_ref {
                             if let Object(this) = this {
-                                let invoke_classdef = class_manager.get_classdef(&this.borrow().class_id);
-                                let invoke_method = invoke_classdef.get_method(&invocation.method.name);
+                                let invoke_classdef =
+                                    class_manager.get_classdef(&this.borrow().class_id);
+                                let invoke_method =
+                                    invoke_classdef.get_method(&invocation.method.name);
                                 if invoke_method.is_some() {
                                     class_manager.load_class_by_name(&invocation.class_name);
-                                    invoke_class = Some(*class_manager.get_classid(&invocation.class_name));
+                                    invoke_class =
+                                        Some(*class_manager.get_classid(&invocation.class_name));
                                 } else {
                                     let name = class_manager.classdef_name(&this.borrow().class_id);
                                     if let Some(name) = name {
@@ -277,34 +326,50 @@ impl Stackframe {
                                         panic!("ClassNotFound");
                                     }
                                 }
-                            } else if let ObjectRef::Class(_class) = this { // special case for Class ?
+                            } else if let ObjectRef::Class(_class) = this {
+                                // special case for Class ?
                                 invoke_class = Some(*class_manager.get_classid("java/lang/Class"));
                             }
                         }
                         if invoke_class.is_none() {
-                            panic!("method {:?}.{} not found", invocation.class_name, invocation.method.name);
+                            panic!(
+                                "method {:?}.{} not found",
+                                invocation.class_name, invocation.method.name
+                            );
                         }
 
-                        let return_value =
-                            if class_manager.get_classdef(&invoke_class.unwrap()).get_method(&invocation.method.name).unwrap().is(Modifier::Native) {
-                                invoke_native(class_manager, invocation.class_name.as_str(), invocation.method.name.as_str(), args).unwrap()
-                                // TODO remove unwrap in line above, error handling
-                            } else {
-                                let mut new_stackframe = Stackframe::new(args);
-                                new_stackframe.run(class_manager, invoke_class.unwrap(), &invocation.method.name)
-                            };
+                        let return_value = if class_manager
+                            .get_classdef(&invoke_class.unwrap())
+                            .get_method(&invocation.method.name)
+                            .unwrap()
+                            .is(Modifier::Native)
+                        {
+                            invoke_native(
+                                class_manager,
+                                invocation.class_name.as_str(),
+                                invocation.method.name.as_str(),
+                                args,
+                            )
+                            .unwrap()
+                            // TODO remove unwrap in line above, error handling
+                        } else {
+                            let mut new_stackframe = Stackframe::new(args);
+                            new_stackframe.run(
+                                class_manager,
+                                invoke_class.unwrap(),
+                                &invocation.method.name,
+                            )
+                        };
                         match return_value {
                             Void => {}
-                            _ => self.push(return_value)
+                            _ => self.push(return_value),
                         }
                     } else {
                         unreachable!()
                     }
                 }
                 INVOKESPECIAL(c) | INVOKESTATIC(c) => {
-                    if let Some(invocation) =
-                        get_signature_for_invoke(&constant_pool, *c)
-                    {
+                    if let Some(invocation) = get_signature_for_invoke(&constant_pool, *c) {
                         debug!("invoke {:?}", invocation);
                         let mut args = Vec::with_capacity(invocation.method.num_args);
                         for _ in 0..invocation.method.num_args {
@@ -315,20 +380,35 @@ impl Stackframe {
                         }
 
                         class_manager.load_class_by_name(invocation.class_name.as_str());
-                        let invoke_class = class_manager.get_classid(invocation.class_name.as_str());
+                        let invoke_class =
+                            class_manager.get_classid(invocation.class_name.as_str());
 
-                        let return_value =
-                            if class_manager.get_classdef(&invoke_class).get_method(&invocation.method.name).unwrap().is(Modifier::Native) {
-                                invoke_native(class_manager, invocation.class_name.as_str(), invocation.method.name.as_str(), args).unwrap()
-                                // TODO remove unwrap in line above, error handling
-                            } else {
-                                let mut new_stackframe = Stackframe::new(args);
-                                new_stackframe.run(class_manager, *invoke_class, &invocation.method.name)
-                            };
+                        let return_value = if class_manager
+                            .get_classdef(&invoke_class)
+                            .get_method(&invocation.method.name)
+                            .unwrap()
+                            .is(Modifier::Native)
+                        {
+                            invoke_native(
+                                class_manager,
+                                invocation.class_name.as_str(),
+                                invocation.method.name.as_str(),
+                                args,
+                            )
+                            .unwrap()
+                            // TODO remove unwrap in line above, error handling
+                        } else {
+                            let mut new_stackframe = Stackframe::new(args);
+                            new_stackframe.run(
+                                class_manager,
+                                *invoke_class,
+                                &invocation.method.name,
+                            )
+                        };
                         debug!("returning {:?}", return_value);
                         match return_value {
                             Void => {}
-                            _ => self.push(return_value)
+                            _ => self.push(return_value),
                         }
                     } else {
                         unreachable!()
@@ -338,17 +418,18 @@ impl Stackframe {
                     let classdef = class_manager.get_classdef(&class_id);
                     let (class_index, field_name_and_type_index) =
                         classdef.cp_field_ref(&field_index); // all these unwraps are safe as long as the class is valid
-                    let (name_index, _) =
-                        classdef.cp_name_and_type(field_name_and_type_index);
+                    let (name_index, _) = classdef.cp_name_and_type(field_name_and_type_index);
                     let field_name = classdef.cp_utf8(name_index).to_owned();
-                    let that_class_name = classdef.cp_utf8(classdef.cp_class_ref(class_index)).to_owned();
+                    let that_class_name = classdef
+                        .cp_utf8(classdef.cp_class_ref(class_index))
+                        .to_owned();
                     class_manager.load_class_by_name(&that_class_name);
                     let that_class = class_manager.get_class_by_name(&that_class_name).unwrap();
 
                     let type_index = that_class
                         .static_field_mapping
                         .get(&that_class_name)
-                        .unwrap()// safe because class for static field must be there
+                        .unwrap() // safe because class for static field must be there
                         .get(&field_name)
                         .unwrap(); // safe because field must be there
 
@@ -360,13 +441,13 @@ impl Stackframe {
                     let classdef = class_manager.get_classdef(&class_id);
                     let (class_index, field_name_and_type_index) =
                         classdef.cp_field_ref(&field_index); // all these unwraps are safe as long as the class is valid
-                    let (name_index, _) =
-                        classdef.cp_name_and_type(field_name_and_type_index);
+                    let (name_index, _) = classdef.cp_name_and_type(field_name_and_type_index);
                     let name = classdef.cp_utf8(name_index);
                     let that_class_name_index = classdef.cp_class_ref(class_index);
                     let that_class_name = classdef.cp_utf8(that_class_name_index);
                     let that_class = class_manager.get_class_by_name(that_class_name).unwrap();
-                    let val_index = that_class.static_field_mapping
+                    let val_index = that_class
+                        .static_field_mapping
                         .get(that_class_name)
                         .unwrap()
                         .get(name)
@@ -380,14 +461,18 @@ impl Stackframe {
                         classdef.cp_field_ref(&field_index);
                     let (field_name_index, _) =
                         classdef.cp_name_and_type(field_name_and_type_index);
-                    let declared_type = classdef.cp_utf8(classdef.cp_class_ref(class_index)).to_owned();
+                    let declared_type = classdef
+                        .cp_utf8(classdef.cp_class_ref(class_index))
+                        .to_owned();
 
                     let field_name = classdef.cp_utf8(field_name_index).to_owned();
-                    debug!("get field {}.{}",declared_type, field_name);
+                    debug!("get field {}.{}", declared_type, field_name);
                     let objectref = self.pop();
                     if let Ref(instance) = objectref {
                         if let Object(object) = instance {
-                            let runtime_type = class_manager.get_class_by_id(&object.borrow().class_id).unwrap();
+                            let runtime_type = class_manager
+                                .get_class_by_id(&object.borrow().class_id)
+                                .unwrap();
                             let object = object.borrow();
                             let value = object.get(runtime_type, &declared_type, &field_name);
                             self.push(value.clone());
@@ -412,18 +497,31 @@ impl Stackframe {
                     let objectref = self.pop();
                     if let Ref(instance) = objectref {
                         if let Object(object) = instance {
-                            let runtime_type = class_manager.get_class_by_id(&object.borrow().class_id).unwrap();
-                            object.borrow_mut().set(runtime_type, &declared_type, &field_name, value);
+                            let runtime_type = class_manager
+                                .get_class_by_id(&object.borrow().class_id)
+                                .unwrap();
+                            object.borrow_mut().set(
+                                runtime_type,
+                                &declared_type,
+                                &field_name,
+                                value,
+                            );
                         }
                     } else {
                         unreachable!()
                     }
                 }
                 NEW(class_index) => {
-                    let class_name_index = *class_manager.get_classdef(&class_id).cp_class_ref(class_index);
-                    let class_name = class_manager.get_classdef(&class_id).cp_utf8(&class_name_index).to_owned();
+                    let class_name_index = *class_manager
+                        .get_classdef(&class_id)
+                        .cp_class_ref(class_index);
+                    let class_name = class_manager
+                        .get_classdef(&class_id)
+                        .cp_utf8(&class_name_index)
+                        .to_owned();
                     class_manager.load_class_by_name(&class_name);
-                    let class_to_instantiate = class_manager.get_class_by_name(&class_name).unwrap();
+                    let class_to_instantiate =
+                        class_manager.get_class_by_name(&class_name).unwrap();
 
                     let object = Object(Rc::new(RefCell::new(object::Object::new(
                         class_to_instantiate,
@@ -432,12 +530,18 @@ impl Stackframe {
                 }
                 NEWARRAY(arraytype) => {
                     let count = self.pop();
+                    debug!("create array with size {:?}", count);
                     let array = ObjectRef::new_array(*arraytype, count.into_i32() as usize);
                     self.push(Ref(array));
                 }
                 ANEWARRAY(class_index) => {
-                    let class_name_index = *class_manager.get_classdef(&class_id).cp_class_ref(class_index);
-                    let class_name = class_manager.get_classdef(&class_id).cp_utf8(&class_name_index).to_owned();
+                    let class_name_index = *class_manager
+                        .get_classdef(&class_id)
+                        .cp_class_ref(class_index);
+                    let class_name = class_manager
+                        .get_classdef(&class_id)
+                        .cp_utf8(&class_name_index)
+                        .to_owned();
                     class_manager.load_class_by_name(&class_name);
                     let arraytype = class_manager.get_class_by_name(&class_name).unwrap();
                     let count = self.pop().into_i32();
@@ -462,8 +566,16 @@ impl Stackframe {
                 IFNULL(_) | IFNONNULL(_) => {
                     let value = self.pop();
                     match value {
-                        Null => if let IFNULL(goto) = opcode { self.pc = *goto as usize; }
-                        _ => if let IFNONNULL(goto) = opcode { self.pc = *goto as usize; }
+                        Null => {
+                            if let IFNULL(goto) = opcode {
+                                self.pc = *goto as usize;
+                            }
+                        }
+                        _ => {
+                            if let IFNONNULL(goto) = opcode {
+                                self.pc = *goto as usize;
+                            }
+                        }
                     };
                 }
                 DUP => {
@@ -477,16 +589,15 @@ impl Stackframe {
                 RETURN_VOID => {
                     return Void;
                 }
-                _ => { panic!("opcode not implemented") }
+                _ => {
+                    panic!("opcode not implemented")
+                }
             }
         }
         Void
     }
 
-    fn store(
-        &mut self,
-        index: u8,
-    ) -> Result<(), Error> {
+    fn store(&mut self, index: u8) -> Result<(), Error> {
         let index = index as usize;
         let value = self.pop();
         while self.locals.len() < index + 1 {
@@ -497,17 +608,17 @@ impl Stackframe {
     }
 }
 
-pub(crate) fn get_signature_for_invoke(cp: &HashMap<u16, CpEntry>, index: u16) -> Option<Invocation> {
+pub(crate) fn get_signature_for_invoke(
+    cp: &HashMap<u16, CpEntry>,
+    index: u16,
+) -> Option<Invocation> {
     if let CpEntry::MethodRef(class_index, name_and_type_index)
     | CpEntry::InterfaceMethodref(class_index, name_and_type_index) = cp.get(&index).unwrap()
     {
         if let Some(method_signature) = get_name_and_type(cp, *name_and_type_index) {
             if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
                 if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
-                    return Some(Invocation::new(
-                        class_name.into(),
-                        method_signature)
-                    );
+                    return Some(Invocation::new(class_name.into(), method_signature));
                 }
             }
         }
@@ -584,10 +695,7 @@ pub(crate) struct Invocation {
 
 impl Invocation {
     pub fn new(class_name: String, method: MethodSignature) -> Self {
-        Self {
-            class_name,
-            method,
-        }
+        Self { class_name, method }
     }
 }
 
@@ -599,9 +707,6 @@ pub(crate) struct MethodSignature {
 
 impl MethodSignature {
     pub(crate) fn new(name: String, num_args: usize) -> Self {
-        MethodSignature {
-            name,
-            num_args,
-        }
+        MethodSignature { name, num_args }
     }
 }

@@ -1,14 +1,14 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::class::{Class, ClassId};
+use crate::value::Value;
+use crate::vm::object::ObjectRef::*;
 use log::debug;
 use rand::random;
-use crate::class::{Class, ClassId};
-use crate::vm::object::ObjectRef::*;
-use crate::value::Value;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum ObjectRef {
-    ByteArray(Vec<i8>),
+    ByteArray(Vec<i8>), //maybe use arrays?
     ShortArray(Vec<i16>),
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
@@ -35,7 +35,7 @@ impl ObjectRef {
             CharArray(d) => d.len(),
             StringArray(d) => d.len(),
             ObjectArray(_, d) => d.len(),
-            _ => unreachable!("not an array {:?}", self)
+            _ => unreachable!("not an array {:?}", self),
         }
     }
 }
@@ -58,15 +58,15 @@ impl ObjectRef {
 
     pub fn new_array(arraytype: u8, size: usize) -> Self {
         match arraytype {
-            8 => ByteArray(Vec::with_capacity(size)),
-            9 => ShortArray(Vec::with_capacity(size)),
-            10 => IntArray(Vec::with_capacity(size)),
-            11 => LongArray(Vec::with_capacity(size)),
-            6 => FloatArray(Vec::with_capacity(size)),
-            7 => DoubleArray(Vec::with_capacity(size)),
-            4 => BooleanArray(Vec::with_capacity(size)),
-            5 => CharArray(Vec::with_capacity(size)),
-            _ => unreachable!("impossible array type")
+            8 => ByteArray(vec![0;size]),
+            9 => ShortArray(vec![0;size]),
+            10 => IntArray(vec![0;size]),
+            11 => LongArray(vec![0;size]),
+            6 => FloatArray(vec![0.0;size]),
+            7 => DoubleArray(vec![0.0;size]),
+            4 => BooleanArray(vec![false;size]),
+            5 => CharArray(vec![0 as char;size]),
+            _ => unreachable!("impossible array type"),
         }
     }
 
@@ -135,7 +135,13 @@ impl Object {
         field_data
     }
 
-    pub fn set(&mut self, runtime_type: &Class, declared_type: &str, field_name: &str, value: Value) {
+    pub fn set(
+        &mut self,
+        runtime_type: &Class,
+        declared_type: &str,
+        field_name: &str,
+        value: Value,
+    ) {
         debug!("set {:?}.{}", runtime_type.name, field_name);
         let type_index = runtime_type
             .object_field_mapping
@@ -153,7 +159,10 @@ impl Object {
             .unwrap()
             .get(field_name)
             .unwrap();
-        debug!("get {:?}:{}.{}:{} @{}", runtime_type, declared_type, field_name, type_index.type_name, type_index.index);
+        debug!(
+            "get {:?}:{}.{}:{} @{}",
+            runtime_type, declared_type, field_name, type_index.type_name, type_index.index
+        );
         debug!("from data {:?}", self.data);
         self.data.get(type_index.index).unwrap()
     }

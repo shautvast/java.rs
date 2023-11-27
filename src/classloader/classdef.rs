@@ -21,7 +21,7 @@ pub(crate) struct ClassDef {
     pub attributes: HashMap<String, AttributeType>,
 }
 
-impl Debug for ClassDef{
+impl Debug for ClassDef {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.cp_class_name(&self.this_class))
     }

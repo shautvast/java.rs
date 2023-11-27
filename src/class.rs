@@ -10,10 +10,7 @@ pub(crate) struct TypeIndex {
 
 impl TypeIndex {
     pub(crate) fn new(type_name: String, index: usize) -> Self {
-        Self {
-            type_name,
-            index,
-        }
+        Self { type_name, index }
     }
 }
 

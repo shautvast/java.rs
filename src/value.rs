@@ -29,6 +29,14 @@ impl Value {
         }
     }
 
+    pub fn into_f32(self) -> f32 {
+        if let Value::F32(v) = self {
+            v
+        } else {
+            panic!("{:?} is not F32", self);
+        }
+    }
+
     pub fn into_object(self) -> ObjectRef {
         if let Value::Ref(v) = self {
             v

@@ -1,8 +1,8 @@
 use std::fs::{self};
 
-use anyhow::{anyhow, Error};
 use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
+use anyhow::{anyhow, Error};
 
 #[cfg(target_family = "unix")]
 pub const PATH_SEPARATOR: char = ':';
@@ -43,7 +43,6 @@ pub fn find_class(classpath: &Vec<String>, class_name: &str) -> Result<String, E
     }
     Err(anyhow!("Class not found {}", class_name))
 }
-
 
 // methods to read values from big-endian binary data
 
@@ -137,7 +136,12 @@ pub(crate) fn read_tableswitch(data: &[u8], pos: &mut usize) -> Tableswitch {
     for _ in low..=high {
         offsets.push(read_i32(data, pos));
     }
-    Tableswitch { default, low, high, offsets }
+    Tableswitch {
+        default,
+        low,
+        high,
+        offsets,
+    }
 }
 
 pub(crate) fn read_lookupswitch(data: &[u8], pos: &mut usize) -> Lookupswitch {
@@ -150,7 +154,10 @@ pub(crate) fn read_lookupswitch(data: &[u8], pos: &mut usize) -> Lookupswitch {
     for _ in 0..npairs {
         match_offset_pairs.push((read_i32(data, pos), read_i32(data, pos)));
     }
-    Lookupswitch { default, match_offset_pairs }
+    Lookupswitch {
+        default,
+        match_offset_pairs,
+    }
 }
 
 pub(crate) fn read_wide_opcode(data: &[u8], pos: &mut usize) -> Opcode {
@@ -171,7 +178,9 @@ pub(crate) fn read_wide_opcode(data: &[u8], pos: &mut usize) -> Opcode {
             57 => WIDE_DSTORE(index),
             58 => WIDE_ASTORE(index),
             169 => WIDE_RET(index),
-            _ => { unreachable!("unknown opcode for WIDE") }
+            _ => {
+                unreachable!("unknown opcode for WIDE")
+            }
         }
     }
 }

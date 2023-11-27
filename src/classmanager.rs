@@ -8,12 +8,13 @@ use once_cell::sync::Lazy;
 use crate::class::{Class, ClassId, TypeIndex};
 use crate::classloader;
 use crate::classloader::classdef::{ClassDef, Method, Modifier};
-use crate::vm::object::{Object, ObjectRef};
 use crate::value::Value;
 use crate::value::Value::*;
+use crate::vm::object::{Object, ObjectRef};
 use crate::vm::runtime::Vm;
 
-static PRIMITIVES: Lazy<Vec<&str>> = Lazy::new(|| vec!["B", "S", "I", "J", "F", "D", "Z", "J", "C"]);
+static PRIMITIVES: Lazy<Vec<&str>> =
+    Lazy::new(|| vec!["B", "S", "I", "J", "F", "D", "Z", "J", "C"]);
 
 //TODO less pubs
 pub struct ClassManager {
@@ -112,8 +113,10 @@ impl ClassManager {
             // in cache?
             let id = self.names.get(&type_name);
             match id {
-                Some(id) => if self.classes.get(id).is_none() {
-                    self.add_class(&type_name);
+                Some(id) => {
+                    if self.classes.get(id).is_none() {
+                        self.add_class(&type_name);
+                    }
                 }
                 None => {
                     self.add_class(&type_name);
@@ -167,42 +170,58 @@ impl ClassManager {
         while let Some(c) = current_id {
             parents.push_front(current_id.unwrap());
             current_classdef = self.classdefs.get(&c).unwrap();
-            Self::add_fields_for_this_or_parents(&mut object_field_mapping, &mut static_field_mapping, object_field_map_index, static_field_map_index, current_classdef);
+            Self::add_fields_for_this_or_parents(
+                &mut object_field_mapping,
+                &mut static_field_mapping,
+                object_field_map_index,
+                static_field_map_index,
+                current_classdef,
+            );
 
-            current_id = current_classdef.super_class.as_ref()
+            current_id = current_classdef
+                .super_class
+                .as_ref()
                 .map(|i| current_classdef.cp_class_name(i).to_owned())
                 .map(|n| *self.names.get(&n).unwrap());
         }
 
         //handrolled references to superclass and interfaces
-        let superclass_id = this_classdef.super_class.as_ref()
+        let superclass_id = this_classdef
+            .super_class
+            .as_ref()
             .map(|i| this_classdef.cp_class_name(i).to_owned())
             .map(|n| *self.names.get(&n).unwrap());
 
-        let interface_ids: Vec<ClassId> = this_classdef.interfaces.iter()
+        let interface_ids: Vec<ClassId> = this_classdef
+            .interfaces
+            .iter()
             .map(|i| this_classdef.cp_class_name(i).to_owned())
             .map(|n| *self.names.get(n.as_str()).unwrap())
             .collect();
 
         // initial values for static fields (before static init)
-        self.static_class_data.insert(this_classid, Self::set_field_data(&static_field_mapping));
+        self.static_class_data
+            .insert(this_classid, Self::set_field_data(&static_field_mapping));
 
-        self.classes.insert(this_classid, Class {
-            id: this_classid,
-            initialized: false,
-            name: name.into(),
-            superclass: superclass_id,
-            parents,
-            interfaces: interface_ids,
-            object_field_mapping,
-            static_field_mapping,
-        });
+        self.classes.insert(
+            this_classid,
+            Class {
+                id: this_classid,
+                initialized: false,
+                name: name.into(),
+                superclass: superclass_id,
+                parents,
+                interfaces: interface_ids,
+                object_field_mapping,
+                static_field_mapping,
+            },
+        );
 
         // add a new Class instance
         if name != "java/lang/Class" {
             let cls = self.get_class_by_name("java/lang/Class").unwrap();
             let mut instance = Object::new(cls);
-            instance.set(cls, "java/lang/Class", "name", Value::Utf8(name.into()));
+            instance.set(cls, "java/lang/Class", "name", Utf8(name.into()));
             let instance = Ref(ObjectRef::Object(Rc::new(RefCell::new(instance))));
 
             self.class_objects.insert(this_classid, instance);
@@ -210,28 +229,34 @@ impl ClassManager {
 
         // run static init
         if this_classdef.methods.contains_key("<clinit>()V") {
-            Vm { stack: Vec::new()}.run2(self, this_classid,"<clinit>()V");
+            Vm { stack: Vec::new() }.run2(self, this_classid, "<clinit>()V");
         }
 
         this_classid
     }
 
     /// like described above
-    fn add_fields_for_this_or_parents(object_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
-                                      static_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
-                                      object_field_map_index: &mut usize,
-                                      static_field_map_index: &mut usize,
-                                      current_classdef: &ClassDef) {
+    fn add_fields_for_this_or_parents(
+        object_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
+        static_field_mapping: &mut HashMap<String, HashMap<String, TypeIndex>>,
+        object_field_map_index: &mut usize,
+        static_field_map_index: &mut usize,
+        current_classdef: &ClassDef,
+    ) {
         let mut instance_field_mappings: HashMap<String, TypeIndex> = HashMap::new();
         let mut static_field_mappings: HashMap<String, TypeIndex> = HashMap::new();
         for (field_name, field) in &current_classdef.fields {
             if !field.is(Modifier::Static) {
-                instance_field_mappings.insert(field_name.to_owned(),
-                                               TypeIndex::new(field.type_of().to_owned(), *object_field_map_index));
+                instance_field_mappings.insert(
+                    field_name.to_owned(),
+                    TypeIndex::new(field.type_of().to_owned(), *object_field_map_index),
+                );
                 *object_field_map_index += 1;
             } else {
-                static_field_mappings.insert(field_name.to_owned(),
-                                             TypeIndex::new(field.type_of().to_owned(), *static_field_map_index));
+                static_field_mappings.insert(
+                    field_name.to_owned(),
+                    TypeIndex::new(field.type_of().to_owned(), *static_field_map_index),
+                );
                 *static_field_map_index += 1;
             }
         }
@@ -258,9 +283,9 @@ impl ClassManager {
         let class_name = class_name.to_owned().replace(".", "/");
         let id = self.get_or_new_id(class_name.clone());
 
-        let classdef = self.classdefs
-            .entry(id)
-            .or_insert_with(|| classloader::get_classdef(&self.classpath, class_name.as_str()).expect("ClassNotFound"));
+        let classdef = self.classdefs.entry(id).or_insert_with(|| {
+            classloader::get_classdef(&self.classpath, class_name.as_str()).expect("ClassNotFound")
+        });
         (id, inspect_dependencies(classdef))
     }
 
@@ -272,7 +297,9 @@ impl ClassManager {
         id
     }
 
-    pub(crate) fn set_field_data(field_mapping: &HashMap<String, HashMap<String, TypeIndex>>) -> Vec<Value> {
+    pub(crate) fn set_field_data(
+        field_mapping: &HashMap<String, HashMap<String, TypeIndex>>,
+    ) -> Vec<Value> {
         let mut field_data = vec![Null; n_fields(field_mapping)];
 
         for (_, this_class) in field_mapping {
@@ -346,27 +373,99 @@ mod test {
 
         // give class C a fields called value
         let mut c_fields = HashMap::new();
-        c_fields.insert("value1".to_owned(), Field::new(constant_pool.clone(), 0, 9, 5, HashMap::new(), 0));
-        c_fields.insert("value2".to_owned(), Field::new(constant_pool.clone(), 0, 10, 5, HashMap::new(), 0));
+        c_fields.insert(
+            "value1".to_owned(),
+            Field::new(constant_pool.clone(), 0, 9, 5, HashMap::new(), 0),
+        );
+        c_fields.insert(
+            "value2".to_owned(),
+            Field::new(constant_pool.clone(), 0, 10, 5, HashMap::new(), 0),
+        );
 
         // Class needs a public (non-static) field called name
         let mut class_fields = HashMap::new();
-        class_fields.insert("name".to_owned(), Field::new(constant_pool.clone(), 1, 2, 5, HashMap::new(), 0));
+        class_fields.insert(
+            "name".to_owned(),
+            Field::new(constant_pool.clone(), 1, 2, 5, HashMap::new(), 0),
+        );
 
         let mut classdefs = HashMap::new();
-        classdefs.insert(1, ClassDef::new(0, 0, constant_pool.clone(), 0, 0, None, vec![], c_fields, HashMap::new(), HashMap::new()));
+        classdefs.insert(
+            1,
+            ClassDef::new(
+                0,
+                0,
+                constant_pool.clone(),
+                0,
+                0,
+                None,
+                vec![],
+                c_fields,
+                HashMap::new(),
+                HashMap::new(),
+            ),
+        );
 
         // preload java.lang.String
-        classdefs.insert(2, ClassDef::new(0, 0, constant_pool.clone(), 0, 6, None, vec![], HashMap::new(), HashMap::new(), HashMap::new()));
+        classdefs.insert(
+            2,
+            ClassDef::new(
+                0,
+                0,
+                constant_pool.clone(),
+                0,
+                6,
+                None,
+                vec![],
+                HashMap::new(),
+                HashMap::new(),
+                HashMap::new(),
+            ),
+        );
 
         // preload java.lang.Class
-        classdefs.insert(3, ClassDef::new(0, 0, constant_pool, 0, 8, None, vec![], class_fields, HashMap::new(), HashMap::new()));
+        classdefs.insert(
+            3,
+            ClassDef::new(
+                0,
+                0,
+                constant_pool,
+                0,
+                8,
+                None,
+                vec![],
+                class_fields,
+                HashMap::new(),
+                HashMap::new(),
+            ),
+        );
         let mut classes = HashMap::new();
         let mut class_field_mapping = HashMap::new();
         let mut fields_declared_by_java_lang_class = HashMap::new();
-        fields_declared_by_java_lang_class.insert("name".to_owned(), TypeIndex { type_name: "java/lang/String".into(), index: 0 });
-        class_field_mapping.insert("java/lang/Class".to_owned(), fields_declared_by_java_lang_class);
-        classes.insert(3, Class { id: 3, initialized: false, name: "".into(), superclass: None, parents: LinkedList::new(), interfaces: vec![], object_field_mapping: class_field_mapping, static_field_mapping: HashMap::new() });
+        fields_declared_by_java_lang_class.insert(
+            "name".to_owned(),
+            TypeIndex {
+                type_name: "java/lang/String".into(),
+                index: 0,
+            },
+        );
+        class_field_mapping.insert(
+            "java/lang/Class".to_owned(),
+            fields_declared_by_java_lang_class,
+        );
+        classes.insert(
+            3,
+            Class {
+                id: 3,
+                initialized: false,
+                name: "".into(),
+                superclass: None,
+                parents: LinkedList::new(),
+                interfaces: vec![],
+                object_field_mapping: class_field_mapping,
+                static_field_mapping: HashMap::new(),
+            },
+        );
 
         let mut cm = ClassManager {
             static_class_data: HashMap::new(),
@@ -381,7 +480,25 @@ mod test {
         let c_id = cm.add_class("C");
         let loaded_class = cm.classes.get(&c_id).unwrap();
 
-        assert_eq!(0, loaded_class.object_field_mapping.get("C").unwrap().get("value1").unwrap().index);
-        assert_eq!(1, loaded_class.object_field_mapping.get("C").unwrap().get("value2").unwrap().index);
+        assert_eq!(
+            0,
+            loaded_class
+                .object_field_mapping
+                .get("C")
+                .unwrap()
+                .get("value1")
+                .unwrap()
+                .index
+        );
+        assert_eq!(
+            1,
+            loaded_class
+                .object_field_mapping
+                .get("C")
+                .unwrap()
+                .get("value2")
+                .unwrap()
+                .index
+        );
     }
 }
