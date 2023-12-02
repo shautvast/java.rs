@@ -93,9 +93,9 @@ pub(crate) fn array_store(value: Value, index: Value, arrayref: Value) -> Result
                         unreachable!()
                     }
                 }
-                CharArray(ref mut array) => unsafe {
+                CharArray(ref mut array) => {
                     if let I32(value) = value {
-                        array[index as usize] = char::from_u32_unchecked(value as u32);
+                        array[index as usize] = char::from_u32(value as u32).unwrap();
                     } else {
                         unreachable!()
                     }

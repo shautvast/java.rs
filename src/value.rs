@@ -17,6 +17,10 @@ pub enum Value {
     Ref(ObjectRef),
     // special object
     Utf8(String),
+    F32Infinity,
+    F32Nan,
+    F64Infinity,
+    F64Nan
 }
 
 impl Value {
@@ -29,11 +33,27 @@ impl Value {
         }
     }
 
+    pub fn into_i64(self) -> i64 {
+        if let Value::I64(v) = self {
+            v
+        } else {
+            panic!("{:?} is not I64", self);
+        }
+    }
+
     pub fn into_f32(self) -> f32 {
         if let Value::F32(v) = self {
             v
         } else {
             panic!("{:?} is not F32", self);
+        }
+    }
+
+    pub fn into_f64(self) -> f64 {
+        if let Value::F64(v) = self {
+            v
+        } else {
+            panic!("{:?} is not F64", self);
         }
     }
 

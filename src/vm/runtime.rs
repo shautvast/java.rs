@@ -240,6 +240,21 @@ impl Stackframe {
                     let value1 = self.pop();
                     self.push(I32(value1.into_i32() / value2.into_i32()));
                 }
+                LDIV => {
+                    let value2 = self.pop();
+                    let value1 = self.pop();
+                    self.push(I64(value1.into_i64() / value2.into_i64()));
+                }
+                FDIV => {
+                    let value2 = self.pop().into_f32();
+                    let value1 = self.pop().into_f32();
+                    self.push(F32(value1 / value2))
+                }
+                DDIV => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    self.push(F64(value1 / value2))
+                }
                 ISHL => {
                     let value2 = self.pop();
                     let value1 = self.pop();
@@ -350,7 +365,7 @@ impl Stackframe {
                                 invocation.method.name.as_str(),
                                 args,
                             )
-                            .unwrap()
+                                .unwrap()
                             // TODO remove unwrap in line above, error handling
                         } else {
                             let mut new_stackframe = Stackframe::new(args);
@@ -395,7 +410,7 @@ impl Stackframe {
                                 invocation.method.name.as_str(),
                                 args,
                             )
-                            .unwrap()
+                                .unwrap()
                             // TODO remove unwrap in line above, error handling
                         } else {
                             let mut new_stackframe = Stackframe::new(args);
@@ -588,6 +603,65 @@ impl Stackframe {
                 }
                 RETURN_VOID => {
                     return Void;
+                }
+                DREM => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    self.push(F64(value1 % value2)); // what about Nan?
+                }
+                INEG => {
+                    let value = self.pop().into_i32();
+                    self.push(I32(-value));
+                }
+                LNEG => {
+                    let value = self.pop().into_i64();
+                    self.push(I64(-value));
+                }
+                FNEG => {
+                    let value = self.pop().into_f32();
+                    self.push(F32(-value));
+                }
+                DNEG => {
+                    let value = self.pop().into_f64();
+                    self.push(F64(-value));
+                }
+                ISHL => {
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
+                    self.push(I32(value1 << value2));
+                }
+                LSHL => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    self.push(I64(value1 << value2));
+                }
+                ISHR => {
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
+                    self.push(I32(value1 >> value2));
+                }
+                LSHR => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    self.push(I64(value1 >> value2));
+                }
+                IUSHR => {
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
+                    if value1 > 0 {
+                        self.push(I32(value1 >> value2));
+                    } else {
+                        self.push(I32(((value1 as u32) >> value2) as i32));
+                    }
+                }
+                LUSHR => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    if value1 > 0 {
+                        self.push(I64(value1 >> value2));
+                    } else {
+                        self.push(Value::I64(((value1 as u64) >> value2) as i64));
+                    }
                 }
                 _ => {
                     panic!("opcode not implemented")
