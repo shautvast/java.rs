@@ -6,7 +6,7 @@ use anyhow::Error;
 use log::debug;
 
 use crate::class::ClassId;
-use crate::classloader::classdef::{CpEntry, Modifier};
+use crate::classloader::classdef::{CpEntry::*, CpEntry, Modifier};
 use crate::classloader::io::PATH_SEPARATOR;
 use crate::classmanager::ClassManager;
 use crate::value::Value::{self, *};
@@ -18,6 +18,7 @@ use crate::vm::object::ObjectRef::Object;
 use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
 use std::io::Write;
+use crate::value::ComputationalType;
 
 const MASK_LOWER_5BITS: i32 = 0b00011111;
 
@@ -46,8 +47,8 @@ impl Vm {
         class_manager.load_class_by_name(class_name);
         let system_id = *class_manager.get_classid("java/lang/System");
         self.run2(&mut class_manager, system_id, "initPhase1()V");
-        // let class_id = *class_manager.get_classid(class_name);
-        // self.run2(&mut class_manager, class_id, method_name);
+        let class_id = *class_manager.get_classid(class_name);
+        self.run2(&mut class_manager, class_id, method_name);
     }
 
     pub(crate) fn run2(
@@ -150,16 +151,16 @@ impl Stackframe {
                 LDC(c) | LDC_W(c) | LDC2_W(c) => {
                     let c = constant_pool.get(&c).unwrap();
                     match c {
-                        CpEntry::Integer(i) => {
+                        Integer(i) => {
                             self.push(I32(*i));
                         }
-                        CpEntry::Float(f) => {
+                        Float(f) => {
                             self.push(F32(*f));
                         }
-                        CpEntry::Double(d) => {
+                        Double(d) => {
                             self.push(F64(*d));
                         }
-                        CpEntry::StringRef(utf8) => {
+                        StringRef(utf8) => {
                             //TODO
                             let string = class_manager.get_classdef(&class_id).cp_utf8(&utf8);
                             let string: Vec<u8> = string.as_bytes().into();
@@ -176,10 +177,10 @@ impl Stackframe {
 
                             self.push(Ref(Object(Rc::new(RefCell::new(stringinstance)))));
                         }
-                        CpEntry::Long(l) => {
+                        Long(l) => {
                             self.push(I64(*l));
                         }
-                        CpEntry::ClassRef(utf8_index) => {
+                        ClassRef(utf8_index) => {
                             let class_name = class_manager
                                 .get_classdef(&class_id)
                                 .cp_utf8(&utf8_index)
@@ -223,17 +224,162 @@ impl Stackframe {
                     self.push(value.clone());
                     self.push(value);
                 }
-                IADD => {
-                    let value2 = self.pop();
+                DUP_X1 => {
                     let value1 = self.pop();
+                    let value2 = self.pop();
+                    self.push(value1.clone());
+                    self.push(value2);
+                    self.push(value1);
+                }
+                DUP_X2 => {
+                    let value1 = self.pop();
+                    let value2 = self.pop();
+                    let value3 = self.pop();
+                    self.push(value1.clone());
+                    self.push(value3);
+                    self.push(value2);
+                    self.push(value1);
+                }
+                DUP2 => {
+                    let value1 = self.pop();
+                    match value1.category() {
+                        ComputationalType::C1 => {
+                            let value2 = self.pop();
+                            self.push(value2.clone());
+                            self.push(value1.clone());
+                            self.push(value2);
+                            self.push(value1);
+                        }
+                        ComputationalType::C2 => {
+                            self.push(value1.clone());
+                            self.push(value1);
+                        }
+                    }
+                }
+                DUP2_X1 => {
+                    let value1 = self.pop();
+                    let value2 = self.pop();
+                    if value1.category() as u8 == 2 && value2.category() as u8 == 1 {
+                        self.push(value1.clone());
+                        self.push(value2);
+                        self.push(value1);
+                    } else {
+                        let value3 = self.pop();
+                        self.push(value2.clone());
+                        self.push(value1.clone());
+                        self.push(value3);
+                        self.push(value2);
+                        self.push(value1);
+                    }
+                }
+                DUP2_X2 => {
+                    let value1 = self.pop();
+                    let value2 = self.pop();
+                    if value1.category_as_u8() == 2
+                        && value2.category_as_u8() == 2 { // Form 4
+                        self.push(value1.clone());
+                        self.push(value2);
+                        self.push(value1);
+                    } else {
+                        let value3 = self.pop();
+                        if value1.category_as_u8() == 1
+                            && value2.category_as_u8() == 1
+                            && value3.category_as_u8() == 2 { // Form 3
+                            self.push(value2.clone());
+                            self.push(value1.clone());
+                            self.push(value3);
+                            self.push(value2);
+                            self.push(value1);
+                        } else if value1.category_as_u8() == 2 // Form 2
+                            && value2.category_as_u8() == 1
+                            && value3.category_as_u8() == 1 {
+                            self.push(value1.clone());
+                            self.push(value3);
+                            self.push(value2);
+                            self.push(value1);
+                        } else { // Form 1
+                            let value4 = self.pop();
+                            self.push(value2.clone());
+                            self.push(value1.clone());
+                            self.push(value4);
+                            self.push(value3);
+                            self.push(value2);
+                            self.push(value1);
+                        }
+                        // not sure about this,
+                        // like what if v1:1, v2:1 v3:1 and v4:2 ?
+                        // it would now fall into form1, which is not in line with the spec
+                        // the alternative is stack corruption??
+                        // unless the compiler prevents this combination from occurring
+                    }
+                }
+                IADD => {
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
                     debug!("{:?}+{:?}", value1, value2);
-                    self.push(I32(value1.into_i32() + value2.into_i32()));
+                    self.push(I32(value1 + value2));
+                }
+                LADD => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(I64(value1 + value2));
+                }
+                FADD => {
+                    let value2 = self.pop().into_f32();
+                    let value1 = self.pop().into_f32();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(F32(value1 + value2));
+                }
+                DADD => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(F64(value1 + value2));
                 }
                 ISUB => {
-                    let value2 = self.pop();
-                    let value1 = self.pop();
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
                     debug!("{:?}-{:?}", value1, value2);
-                    self.push(I32(value1.into_i32() - value2.into_i32()));
+                    self.push(I32(value1 - value2));
+                }
+                LSUB => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(I64(value1 - value2));
+                }
+                FSUB => {
+                    let value2 = self.pop().into_f32();
+                    let value1 = self.pop().into_f32();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(F32(value1 - value2));
+                }
+                DSUB => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    debug!("{:?}-{:?}", value1, value2);
+                    self.push(F64(value1 - value2));
+                }
+                IMUL => {
+                    let value2 = self.pop().into_i32();
+                    let value1 = self.pop().into_i32();
+                    self.push(I32(value1 * value2))
+                }
+                LMUL => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    self.push(I64(value1 * value2))
+                }
+                FMUL => {
+                    let value2 = self.pop().into_f32();
+                    let value1 = self.pop().into_f32();
+                    self.push(F32(value1 * value2))
+                }
+                DMUL => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    self.push(F64(value1 * value2))
                 }
                 IDIV => {
                     let value2 = self.pop();
@@ -686,11 +832,11 @@ pub(crate) fn get_signature_for_invoke(
     cp: &HashMap<u16, CpEntry>,
     index: u16,
 ) -> Option<Invocation> {
-    if let CpEntry::MethodRef(class_index, name_and_type_index)
-    | CpEntry::InterfaceMethodref(class_index, name_and_type_index) = cp.get(&index).unwrap()
+    if let MethodRef(class_index, name_and_type_index)
+    | InterfaceMethodref(class_index, name_and_type_index) = cp.get(&index).unwrap()
     {
         if let Some(method_signature) = get_name_and_type(cp, *name_and_type_index) {
-            if let CpEntry::ClassRef(class_name_index) = cp.get(class_index).unwrap() {
+            if let ClassRef(class_name_index) = cp.get(class_index).unwrap() {
                 if let CpEntry::Utf8(class_name) = cp.get(class_name_index).unwrap() {
                     return Some(Invocation::new(class_name.into(), method_signature));
                 }
@@ -701,7 +847,7 @@ pub(crate) fn get_signature_for_invoke(
 }
 
 pub(crate) fn get_name_and_type(cp: &HashMap<u16, CpEntry>, index: u16) -> Option<MethodSignature> {
-    if let CpEntry::NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
+    if let NameAndType(method_name_index, signature_index) = cp.get(&index).unwrap() {
         if let CpEntry::Utf8(method_name) = cp.get(method_name_index).unwrap() {
             if let CpEntry::Utf8(signature) = cp.get(signature_index).unwrap() {
                 let mut method_signature: String = method_name.into();

@@ -17,13 +17,32 @@ pub enum Value {
     Ref(ObjectRef),
     // special object
     Utf8(String),
-    F32Infinity,
-    F32Nan,
-    F64Infinity,
-    F64Nan
+}
+
+pub enum ComputationalType {
+    C1 = 1,
+    C2 = 2,
 }
 
 impl Value {
+    pub fn category_as_u8(&self) -> u8 {
+        self.category() as u8
+    }
+    pub fn category(&self) -> ComputationalType {
+        match self {
+            Value::Void
+            | Value::Null
+            | Value::I32(_)
+            | Value::F32(_)
+            | Value::BOOL(_)
+            | Value::CHAR(_)
+            | Value::Ref(_)
+            | Value::Utf8(_) => ComputationalType::C1,
+            Value::I64(_)
+            | Value::F64(_) => ComputationalType::C2
+        }
+    }
+
     // panics if not correct type
     pub fn into_i32(self) -> i32 {
         if let Value::I32(v) = self {
