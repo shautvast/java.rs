@@ -16,7 +16,7 @@ pub enum ObjectRef {
     FloatArray(Vec<f32>),
     DoubleArray(Vec<f64>),
     BooleanArray(Vec<bool>),
-    CharArray(Vec<char>),
+    CharArray(Vec<i32>),
     StringArray(Vec<String>),
     ObjectArray(ClassId, Vec<ObjectRef>),
     Object(Rc<RefCell<Object>>),
@@ -86,7 +86,7 @@ impl ObjectRef {
             6 => FloatArray(vec![0.0; size]),
             7 => DoubleArray(vec![0.0; size]),
             4 => BooleanArray(vec![false; size]),
-            5 => CharArray(vec![0 as char; size]),
+            5 => CharArray(vec![0; size]),
             _ => unreachable!("impossible array type"),
         }
     }

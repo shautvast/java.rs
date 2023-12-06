@@ -421,19 +421,87 @@ impl Stackframe {
                         value1.into_i32() >> (value2.into_i32() & MASK_LOWER_5BITS)
                     ));
                 }
+                LCMP => {
+                    let value2 = self.pop().into_i64();
+                    let value1 = self.pop().into_i64();
+                    self.push(I32(compare(value1, value2)));
+                }
+                IINC(index8, const8) => {
+                    self.increment(*index8 as usize, *const8 as u16);
+                }
+                I2L => {
+                    let value = self.pop().into_i32() as i64;
+                    self.push(I64(value));
+                }
+                I2F => {
+                    let value = self.pop().into_i32() as f32;
+                    self.push(F32(value));
+                }
+                I2D => {
+                    let value = self.pop().into_i32() as f64;
+                    self.push(F64(value));
+                }
+                L2I => {
+                    let value = self.pop().into_i64() as i32;
+                    self.push(I32(value));
+                }
+                L2F => {
+                    let value = self.pop().into_i64() as f32;
+                    self.push(F32(value));
+                }
+                L2D => {
+                    let value = self.pop().into_i64() as f64;
+                    self.push(F64(value));
+                }
+                WIDE_IINC(index16, const16) => {
+                    self.increment(*index16 as usize, *const16);
+                }
+                F2I => {
+                    let value = self.pop().into_f32() as i32;
+                    self.push(I32(value));
+                }
+                F2L => {
+                    let value = self.pop().into_f32() as i64;
+                    self.push(I64(value));
+                }
+                F2D => {
+                    let value = self.pop().into_f32() as f64;
+                    self.push(F64(value));
+                }
+                D2I => {
+                    let value = self.pop().into_f64() as i32;
+                    self.push(I32(value));
+                }
+                D2L => {
+                    let value = self.pop().into_f64() as i64;
+                    self.push(I64(value));
+                }
+                D2F => {
+                    let value = self.pop().into_f64() as f32;
+                    self.push(F32(value));
+                }
+                I2B => {
+                    let value = self.pop().into_i32() as u8;
+                    self.push(I32(value as i32));
+                }
+                I2C => {
+                    let value = self.pop().into_i32();
+                    self.push(CHAR(value));
+                }
+                I2S => {
+                    let value = self.pop().into_i32() as i16; //semantics for narrowing seems same as java
+                    self.push(I32(value as i32));
+                }
                 FCMPG | FCMPL => {
                     let value2 = self.pop().into_f32();
                     let value1 = self.pop().into_f32();
-                    if value1 == value2 {
-                        self.push(I32(0))
-                    } else if value1 < value2 {
-                        self.push(I32(-1))
-                    } else if value1 > value2 {
-                        self.push(I32(1))
-                    }
-                    //TODO something with NaN
+                    self.push(I32(compare(value1, value2)));
                 }
-
+                DCMPG | DCMPL => {
+                    let value2 = self.pop().into_f64();
+                    let value1 = self.pop().into_f64();
+                    self.push(I32(compare(value1, value2)));
+                }
                 IFEQ(jmp_to) | IFNE(jmp_to) | IFLT(jmp_to) | IFGE(jmp_to) | IFGT(jmp_to)
                 | IFLE(jmp_to) => {
                     let value = self.pop();
@@ -774,20 +842,10 @@ impl Stackframe {
                     let value = self.pop().into_f64();
                     self.push(F64(-value));
                 }
-                ISHL => {
-                    let value2 = self.pop().into_i32();
-                    let value1 = self.pop().into_i32();
-                    self.push(I32(value1 << value2));
-                }
                 LSHL => {
                     let value2 = self.pop().into_i64();
                     let value1 = self.pop().into_i64();
                     self.push(I64(value1 << value2));
-                }
-                ISHR => {
-                    let value2 = self.pop().into_i32();
-                    let value1 = self.pop().into_i32();
-                    self.push(I32(value1 >> value2));
                 }
                 LSHR => {
                     let value2 = self.pop().into_i64();
@@ -818,6 +876,16 @@ impl Stackframe {
             }
         }
         Void
+    }
+
+    fn increment(&mut self, index: usize, inc: u16) {
+        match &mut self.locals[index] {
+            I32(l) => *l += (inc as i32),
+            I64(l) => *l += (inc as i64),
+            F32(l) => *l += (inc as f32),
+            F64(l) => *l += (inc as f64),
+            _ => {}
+        }
     }
 
     fn store(&mut self, index: u8) -> Result<(), Error> {
@@ -932,4 +1000,11 @@ impl MethodSignature {
     pub(crate) fn new(name: String, num_args: usize) -> Self {
         MethodSignature { name, num_args }
     }
+}
+
+fn compare<T>(a: T, b: T) -> i32
+where
+    T: PartialOrd,
+{
+    a.partial_cmp(&b).unwrap() as i32
 }

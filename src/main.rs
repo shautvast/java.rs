@@ -1,4 +1,5 @@
 use java_rs::vm::runtime::Vm;
+use std::cmp::Ordering::Equal;
 
 fn main() {
     let a = 0.0;

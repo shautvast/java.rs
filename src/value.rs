@@ -1,4 +1,5 @@
 use crate::vm::object::ObjectRef;
+use std::ops::{Add, AddAssign};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -12,7 +13,7 @@ pub enum Value {
     F32(f32),
     F64(f64),
     BOOL(bool),
-    CHAR(char),
+    CHAR(i32),
     // objects and arrays
     Ref(ObjectRef),
     // special object
@@ -38,8 +39,7 @@ impl Value {
             | Value::CHAR(_)
             | Value::Ref(_)
             | Value::Utf8(_) => ComputationalType::C1,
-            Value::I64(_)
-            | Value::F64(_) => ComputationalType::C2
+            Value::I64(_) | Value::F64(_) => ComputationalType::C2,
         }
     }
 
@@ -78,6 +78,14 @@ impl Value {
 
     pub fn into_object(self) -> ObjectRef {
         if let Value::Ref(v) = self {
+            v
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn into_utf8(self) -> String {
+        if let Value::Utf8(v) = self {
             v
         } else {
             panic!();

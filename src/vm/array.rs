@@ -95,11 +95,11 @@ pub(crate) fn array_store(value: Value, index: Value, arrayref: Value) -> Result
                 }
                 CharArray(ref mut array) => {
                     if let I32(value) = value {
-                        array[index as usize] = char::from_u32(value as u32).unwrap();
+                        array[index as usize] = value
                     } else {
                         unreachable!()
                     }
-                },
+                }
                 LongArray(ref mut array) => {
                     if let I64(value) = value {
                         array[index as usize] = value;
