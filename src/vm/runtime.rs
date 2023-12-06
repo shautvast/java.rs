@@ -6,9 +6,10 @@ use anyhow::Error;
 use log::debug;
 
 use crate::class::ClassId;
-use crate::classloader::classdef::{CpEntry::*, CpEntry, Modifier};
+use crate::classloader::classdef::{CpEntry, CpEntry::*, Modifier};
 use crate::classloader::io::PATH_SEPARATOR;
 use crate::classmanager::ClassManager;
+use crate::value::ComputationalType;
 use crate::value::Value::{self, *};
 use crate::vm::array::{array_load, array_store};
 use crate::vm::native::invoke_native;
@@ -18,7 +19,6 @@ use crate::vm::object::ObjectRef::Object;
 use crate::vm::opcodes::Opcode;
 use crate::vm::opcodes::Opcode::*;
 use std::io::Write;
-use crate::value::ComputationalType;
 
 const MASK_LOWER_5BITS: i32 = 0b00011111;
 
@@ -275,8 +275,8 @@ impl Stackframe {
                 DUP2_X2 => {
                     let value1 = self.pop();
                     let value2 = self.pop();
-                    if value1.category_as_u8() == 2
-                        && value2.category_as_u8() == 2 { // Form 4
+                    if value1.category_as_u8() == 2 && value2.category_as_u8() == 2 {
+                        // Form 4
                         self.push(value1.clone());
                         self.push(value2);
                         self.push(value1);
@@ -284,7 +284,9 @@ impl Stackframe {
                         let value3 = self.pop();
                         if value1.category_as_u8() == 1
                             && value2.category_as_u8() == 1
-                            && value3.category_as_u8() == 2 { // Form 3
+                            && value3.category_as_u8() == 2
+                        {
+                            // Form 3
                             self.push(value2.clone());
                             self.push(value1.clone());
                             self.push(value3);
@@ -292,12 +294,14 @@ impl Stackframe {
                             self.push(value1);
                         } else if value1.category_as_u8() == 2 // Form 2
                             && value2.category_as_u8() == 1
-                            && value3.category_as_u8() == 1 {
+                            && value3.category_as_u8() == 1
+                        {
                             self.push(value1.clone());
                             self.push(value3);
                             self.push(value2);
                             self.push(value1);
-                        } else { // Form 1
+                        } else {
+                            // Form 1
                             let value4 = self.pop();
                             self.push(value2.clone());
                             self.push(value1.clone());
@@ -438,13 +442,12 @@ impl Stackframe {
 
                 IF_ICMPEQ(jmp_to) | IF_ICMPNE(jmp_to) | IF_ICMPGT(jmp_to) | IF_ICMPGE(jmp_to)
                 | IF_ICMPLT(jmp_to) | IF_ICMPLE(jmp_to) => {
-                    let value1 = self.pop();
                     let value2 = self.pop();
+                    let value1 = self.pop();
                     if_cmp(&mut self.pc, opcode, jmp_to, &value1, &value2);
                 }
                 GOTO(jmp_to) => {
                     self.pc += *jmp_to as usize;
-                    // debug!("GOTO {}", *pc)
                 }
                 INVOKEVIRTUAL(c) => {
                     if let Some(invocation) = get_signature_for_invoke(&constant_pool, *c) {
@@ -511,7 +514,7 @@ impl Stackframe {
                                 invocation.method.name.as_str(),
                                 args,
                             )
-                                .unwrap()
+                            .unwrap()
                             // TODO remove unwrap in line above, error handling
                         } else {
                             let mut new_stackframe = Stackframe::new(args);
@@ -556,7 +559,7 @@ impl Stackframe {
                                 invocation.method.name.as_str(),
                                 args,
                             )
-                                .unwrap()
+                            .unwrap()
                             // TODO remove unwrap in line above, error handling
                         } else {
                             let mut new_stackframe = Stackframe::new(args);

@@ -4,9 +4,10 @@ use crate::vm::object::ObjectRef::*;
 use log::debug;
 use rand::random;
 use std::cell::RefCell;
+use std::fmt::{Debug, Formatter, Pointer};
 use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ObjectRef {
     ByteArray(Vec<i8>), //maybe use arrays?
     ShortArray(Vec<i16>),
@@ -20,6 +21,26 @@ pub enum ObjectRef {
     ObjectArray(ClassId, Vec<ObjectRef>),
     Object(Rc<RefCell<Object>>),
     Class(Class),
+}
+
+impl Debug for ObjectRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            ByteArray(_) => "[B", //length for arrays
+            ShortArray(_) => "[S",
+            IntArray(_) => "[I]",
+            LongArray(_) => "[J",
+            FloatArray(_) => "[F",
+            DoubleArray(_) => "[D]",
+            BooleanArray(_) => "[Z",
+            CharArray(_) => "[C",
+            StringArray(_) => "[Ljava/lang/String]",
+            ObjectArray(_, _) => "[L",
+            Object(_) => "L",
+            Class(_) => "Class",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 impl ObjectRef {
@@ -58,14 +79,14 @@ impl ObjectRef {
 
     pub fn new_array(arraytype: u8, size: usize) -> Self {
         match arraytype {
-            8 => ByteArray(vec![0;size]),
-            9 => ShortArray(vec![0;size]),
-            10 => IntArray(vec![0;size]),
-            11 => LongArray(vec![0;size]),
-            6 => FloatArray(vec![0.0;size]),
-            7 => DoubleArray(vec![0.0;size]),
-            4 => BooleanArray(vec![false;size]),
-            5 => CharArray(vec![0 as char;size]),
+            8 => ByteArray(vec![0; size]),
+            9 => ShortArray(vec![0; size]),
+            10 => IntArray(vec![0; size]),
+            11 => LongArray(vec![0; size]),
+            6 => FloatArray(vec![0.0; size]),
+            7 => DoubleArray(vec![0.0; size]),
+            4 => BooleanArray(vec![false; size]),
+            5 => CharArray(vec![0 as char; size]),
             _ => unreachable!("impossible array type"),
         }
     }
